@@ -189,83 +189,98 @@ export default function CourseBuilder() {
         <div className="p-5">
           {activeTab === "immersion" && (
             <div className="flex flex-col gap-4">
-              <div className="overflow-hidden rounded-2xl border border-amber-500/30 bg-gradient-to-b from-[#1c1410] to-[#0c0906] px-5 py-4">
-                <p className={`${cinzel.className} text-center text-2xl tracking-[0.3em] text-amber-300`}>MENU</p>
-                <p
-                  className={`${cinzel.className} mt-1 text-center text-[10px] tracking-[0.4em] text-amber-400/70`}
-                >
-                  PLAYTING &amp; TASTING
-                </p>
-                <div className="mx-auto mt-3 h-px w-14 bg-amber-500/40" />
+              <div
+                className="relative overflow-hidden rounded-2xl border border-amber-500/30 px-5 py-4"
+                style={{ aspectRatio: "1056 / 1489" }}
+              >
+                <Image
+                  src="/table/menu-board.png"
+                  alt=""
+                  fill
+                  sizes="(max-width: 448px) 100vw, 400px"
+                  className="object-cover"
+                  priority
+                />
+                <div className="relative z-10">
+                  <p className={`${cinzel.className} mt-6 text-center text-2xl font-semibold tracking-[0.3em] text-black`}>
+                    MENU
+                  </p>
+                  <p
+                    className={`${cinzel.className} mt-1 text-center text-[10px] tracking-[0.4em] text-black/70`}
+                  >
+                    PLAYTING &amp; TASTING
+                  </p>
+                  <div className="mx-auto mt-3 h-px w-14 bg-amber-500/40" />
 
-                <div className="mt-4 flex flex-col gap-3">
-                  <div>
-                    <p
-                      className={`${songMyung.className} text-lg ${
-                        includeAppetizer ? "text-amber-100" : "text-amber-100/30 line-through"
-                      }`}
-                    >
-                      에피타이저
-                    </p>
-                    <p
-                      className={`mt-0.5 pl-4 font-sans text-xs italic ${
-                        includeAppetizer ? "text-amber-200/60" : "text-amber-200/25"
-                      }`}
-                    >
-                      선택하신 영화의 PV 혹은 예고편이 제공됩니다.
-                    </p>
-                  </div>
+                  <div className="mt-4 flex flex-col gap-3 pl-3">
+                    <div>
+                      <p
+                        className={`${songMyung.className} text-lg ${
+                          includeAppetizer ? "text-black" : "text-black/30 line-through"
+                        }`}
+                      >
+                        에피타이저
+                      </p>
+                      <p
+                        className={`mt-0.5 pl-4 font-sans text-xs italic ${
+                          includeAppetizer ? "text-gray-500" : "text-gray-400"
+                        }`}
+                      >
+                        선택하신 영화의 PV 혹은 예고편이 제공됩니다.
+                      </p>
+                    </div>
 
-                  <div>
-                    <p className={`${songMyung.className} text-lg text-amber-100`}>메인디쉬</p>
-                    <div className="mt-2 flex gap-3">
-                      {mainDishSelected?.posterUrl ? (
-                        <div className="relative aspect-[2/3] w-28 shrink-0 overflow-hidden rounded-md border border-amber-500/40">
-                          <Image
-                            src={mainDishSelected.posterUrl}
-                            alt={mainDishSelected.title}
-                            fill
-                            sizes="112px"
-                            className="object-cover"
-                          />
-                        </div>
-                      ) : (
-                        <div className="aspect-[2/3] w-28 shrink-0 rounded-md border border-dashed border-amber-500/30" />
-                      )}
-                      <div className="min-w-0 flex-1">
-                        {mainDishSelected ? (
-                          <div className="font-sans text-xs leading-relaxed text-amber-200/80">
-                            <p className="line-clamp-1">
-                              {mainDishSelected.title}
-                              {mainDishSelected.year ? ` · ${mainDishSelected.year}` : ""}
-                            </p>
-                            {detailsLoading ? (
-                              <p className="text-amber-200/50">정보를 불러오는 중&hellip;</p>
-                            ) : (
-                              <>
-                                <p className="line-clamp-1">감독 {mainDishDetails?.director ?? "정보 없음"}</p>
-                                <p className="line-clamp-1">
-                                  출연{" "}
-                                  {mainDishDetails?.cast.length ? mainDishDetails.cast.join(", ") : "정보 없음"}
-                                </p>
-                                <p>{mainDishDetails?.ottName ?? "제공 플랫폼 확인 중"}</p>
-                              </>
-                            )}
+                    <div>
+                      <p className={`${songMyung.className} text-lg text-black`}>메인디쉬</p>
+                      <div className="mt-2 flex gap-3">
+                        {mainDishSelected?.posterUrl ? (
+                          <div className="relative aspect-[2/3] w-28 shrink-0 overflow-hidden rounded-md border border-amber-500/40">
+                            <Image
+                              src={mainDishSelected.posterUrl}
+                              alt={mainDishSelected.title}
+                              fill
+                              sizes="112px"
+                              className="object-cover"
+                            />
                           </div>
                         ) : (
-                          <p className="font-sans text-[11px] text-amber-200/50">메인디쉬를 선택해주세요</p>
+                          <div className="aspect-[2/3] w-28 shrink-0 rounded-md border border-dashed border-black" />
                         )}
+                        <div className="min-w-0 flex-1">
+                          {mainDishSelected ? (
+                            <div className="font-sans text-xs leading-relaxed text-black">
+                              <p className="line-clamp-1">
+                                {mainDishSelected.title}
+                                {mainDishSelected.year ? ` · ${mainDishSelected.year}` : ""}
+                              </p>
+                              {detailsLoading ? (
+                                <p className="text-black">정보를 불러오는 중&hellip;</p>
+                              ) : (
+                                <>
+                                  <p className="line-clamp-1">감독 {mainDishDetails?.director ?? "정보 없음"}</p>
+                                  <p className="line-clamp-1">
+                                    출연{" "}
+                                    {mainDishDetails?.cast.length ? mainDishDetails.cast.join(", ") : "정보 없음"}
+                                  </p>
+                                  <p>{mainDishDetails?.ottName ?? "제공 플랫폼 확인 중"}</p>
+                                </>
+                              )}
+                            </div>
+                          ) : (
+                            <p className="font-sans text-[11px] text-gray-500">메인디쉬를 선택해주세요</p>
+                          )}
+                        </div>
                       </div>
                     </div>
-                  </div>
 
-                  <p
-                    className={`${songMyung.className} text-lg ${
-                      includeDessert ? "text-amber-100" : "text-amber-100/30 line-through"
-                    }`}
-                  >
-                    디저트
-                  </p>
+                    <p
+                      className={`${songMyung.className} text-lg ${
+                        includeDessert ? "text-black" : "text-black/30 line-through"
+                      }`}
+                    >
+                      디저트
+                    </p>
+                  </div>
                 </div>
               </div>
 
