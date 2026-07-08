@@ -73,6 +73,28 @@ export function isGeminiConfigured(): boolean {
 }
 
 /**
+ * The free Gemini tier's per-minute rate limit is easy to hit when a single
+ * shared API key serves every visitor (booth demo, small deployment) — a
+ * 429/503 here would otherwise surface as "recommendations silently vanished"
+ * on the home screen. Retries with a short backoff before giving up.
+ */
+async function generateContentWithRetry(
+  ai: GoogleGenAI,
+  params: Parameters<GoogleGenAI["models"]["generateContent"]>[0],
+  attempts = 3
+): Promise<Awaited<ReturnType<GoogleGenAI["models"]["generateContent"]>>> {
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      return await ai.models.generateContent(params);
+    } catch (error) {
+      if (attempt === attempts) throw error;
+      await new Promise((resolve) => setTimeout(resolve, attempt * 800));
+    }
+  }
+  throw new Error("unreachable");
+}
+
+/**
  * Keeps only the first grapheme cluster so multi-codepoint emoji (flags, ZWJ
  * sequences, skin-tone modifiers) survive intact — the model doesn't always
  * follow the "exactly one emoji" instruction, so this enforces it regardless.
@@ -163,7 +185,7 @@ ${preferenceLines}
 - 각 코스 안에서 작품들은 하나의 OTT에 몰리지 않고 다양한 플랫폼에서 고르게 선택해주세요.
 - 사용자가 선호 감독/배우를 입력했다면, 그중 최소 한 코스는 그 인물의 대표작 위주로 구성해주세요.`;
 
-  const response = await ai.models.generateContent({
+  const response = await generateContentWithRetry(ai, {
     model: MODEL,
     contents: prompt,
     config: {
@@ -249,7 +271,7 @@ category는 다음 중 이 작품에 가장 잘 맞는 하나를 고르세요:
 
 searchQuery에는 실제 작품명을 포함한, 유튜브에서 바로 검색할 수 있는 한국어 검색어를 만들어주세요.`;
 
-  const response = await ai.models.generateContent({
+  const response = await generateContentWithRetry(ai, {
     model: MODEL,
     contents: prompt,
     config: {

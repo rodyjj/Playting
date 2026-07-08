@@ -19,6 +19,38 @@ type Course = {
   items: CourseItem[];
 };
 
+const COURSE_CACHE_KEY = "playting_courses_cache";
+// Gemini's free tier caps out at a small number of requests per day, shared
+// across every visitor hitting this one deployment — regenerating on every
+// single home visit (as opposed to every distinct *session*) burns through
+// that budget almost immediately at a booth with real foot traffic. Reusing
+// the last result for a few minutes keeps "feels fresh each visit" without
+// spending a Gemini call on every accidental re-render or quick tab switch.
+const COURSE_CACHE_TTL_MS = 10 * 60 * 1000;
+
+type CourseCache = {
+  key: string;
+  generatedAt: number;
+  courses: Course[];
+};
+
+function readCourseCache(key: string): Course[] | null {
+  try {
+    const raw = window.localStorage.getItem(COURSE_CACHE_KEY);
+    if (!raw) return null;
+    const cache = JSON.parse(raw) as CourseCache;
+    if (cache.key !== key || Date.now() - cache.generatedAt > COURSE_CACHE_TTL_MS) return null;
+    return cache.courses;
+  } catch {
+    return null;
+  }
+}
+
+function writeCourseCache(key: string, courses: Course[]) {
+  const cache: CourseCache = { key, generatedAt: Date.now(), courses };
+  window.localStorage.setItem(COURSE_CACHE_KEY, JSON.stringify(cache));
+}
+
 function ottColor(ott: string) {
   return OTT_PROVIDERS.find((p) => p.name === ott)?.color ?? "#2D437A";
 }
@@ -121,10 +153,15 @@ function CourseRow({
 export default function CourseList() {
   const [courses, setCourses] = useState<Course[] | null>(null);
   const [configured, setConfigured] = useState(true);
+  const [failed, setFailed] = useState(false);
   const [subscribedOttNames, setSubscribedOttNames] = useState<Set<string>>(new Set());
+  const [retryToken, setRetryToken] = useState(0);
+  const forceRefreshRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
+    const forceRefresh = forceRefreshRef.current;
+    forceRefreshRef.current = false;
 
     fetchOnboardingData().then((data) => {
       if (cancelled) return;
@@ -146,6 +183,16 @@ export default function CourseList() {
         return;
       }
 
+      const cacheKey = JSON.stringify({ genres, people, subscribedOtt });
+      const cached = forceRefresh ? null : readCourseCache(cacheKey);
+      if (cached) {
+        setConfigured(true);
+        setFailed(false);
+        setCourses(cached);
+        return;
+      }
+
+      setFailed(false);
       fetch("/api/courses", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -155,17 +202,25 @@ export default function CourseList() {
         .then((json) => {
           if (cancelled) return;
           setConfigured(Boolean(json.configured));
-          setCourses(json.courses ?? []);
+          setFailed(Boolean(json.error));
+          const nextCourses: Course[] = json.courses ?? [];
+          setCourses(nextCourses);
+          if (!json.error && nextCourses.length > 0) writeCourseCache(cacheKey, nextCourses);
         })
         .catch(() => {
-          if (!cancelled) setCourses([]);
+          if (cancelled) return;
+          setFailed(true);
+          setCourses([]);
         });
     });
 
     return () => {
       cancelled = true;
     };
-  }, []);
+    // Every mount (including a soft-nav revisit of "/") should generate a fresh
+    // set of courses — `retryToken` also lets the manual retry button below
+    // re-run this same effect without duplicating its logic.
+  }, [retryToken]);
 
   if (courses === null) {
     return (
@@ -189,7 +244,27 @@ export default function CourseList() {
     );
   }
 
-  if (courses.length === 0) return null;
+  if (courses.length === 0) {
+    if (!failed) return null;
+    return (
+      <div className="mx-6 mt-8 flex flex-col items-center gap-2 rounded-2xl border border-border bg-surface p-5 text-center">
+        <p className="text-xs leading-relaxed text-muted">
+          코스를 준비하는 중 문제가 생겼어요. 잠시 후 다시 시도해주세요.
+        </p>
+        <button
+          type="button"
+          onClick={() => {
+            forceRefreshRef.current = true;
+            setCourses(null);
+            setRetryToken((t) => t + 1);
+          }}
+          className="rounded-full border border-accent-light px-4 py-1.5 text-xs font-semibold text-accent-light transition-colors hover:bg-accent-soft"
+        >
+          다시 시도
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-8 pt-8">

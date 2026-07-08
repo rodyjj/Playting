@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-import { PROMO_TITLES } from "@/data/promo-titles";
-import { isTmdbConfigured, searchPoster, type PosterMediaType } from "@/lib/tmdb";
+import { getTrendingWithWatchLinks, isTmdbConfigured, searchPoster, type PosterMediaType } from "@/lib/tmdb";
 
 export async function GET(request: Request) {
   const configured = isTmdbConfigured();
@@ -24,16 +23,8 @@ export async function GET(request: Request) {
     return NextResponse.json({ configured: true, posterUrl });
   }
 
-  // Batch mode — resolves posters for the curated promo carousel list.
-  const resolved = await Promise.all(
-    PROMO_TITLES.map(async (item) => ({
-      ...item,
-      posterUrl: await searchPoster({ title: item.title, mediaType: item.mediaType, year: item.year }),
-    }))
-  );
+  // Batch mode — live trending titles for the promo carousel (see getTrendingWithWatchLinks).
+  const items = await getTrendingWithWatchLinks(15);
 
-  return NextResponse.json({
-    configured: true,
-    items: resolved.filter((item) => item.posterUrl),
-  });
+  return NextResponse.json({ configured: true, items });
 }

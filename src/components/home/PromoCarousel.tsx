@@ -2,21 +2,29 @@
 
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
-import type { PromoTitle } from "@/data/promo-titles";
 import { OTT_PROVIDERS } from "@/data/ott-providers";
 
-type ResolvedPromoTitle = PromoTitle & { posterUrl: string };
+type PromoItem = {
+  id: number;
+  title: string;
+  ott: string;
+  year?: number;
+  mediaType: "movie" | "tv";
+  posterUrl: string;
+  watchUrl: string;
+};
 
 const ITEM_WIDTH_RATIO = 0.42;
 const GAP = 14;
 const AUTO_PLAY_MS = 4000;
+const DRAG_CLICK_THRESHOLD = 5;
 
 function ottColor(ott: string) {
   return OTT_PROVIDERS.find((p) => p.name === ott)?.color ?? "#2D437A";
 }
 
 export default function PromoCarousel() {
-  const [items, setItems] = useState<ResolvedPromoTitle[] | null>(null);
+  const [items, setItems] = useState<PromoItem[] | null>(null);
   const [configured, setConfigured] = useState(true);
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(0);
@@ -24,6 +32,7 @@ export default function PromoCarousel() {
   const dragStartX = useRef<number | null>(null);
   const [dragDeltaX, setDragDeltaX] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
+  const movedRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -98,11 +107,14 @@ export default function PromoCarousel() {
     dragStartX.current = e.clientX;
     setDragDeltaX(0);
     setIsDragging(true);
+    movedRef.current = false;
   };
 
   const handlePointerMove = (e: React.PointerEvent) => {
     if (dragStartX.current === null) return;
-    setDragDeltaX(e.clientX - dragStartX.current);
+    const delta = e.clientX - dragStartX.current;
+    if (Math.abs(delta) > DRAG_CLICK_THRESHOLD) movedRef.current = true;
+    setDragDeltaX(delta);
   };
 
   const handlePointerUp = () => {
@@ -124,6 +136,10 @@ export default function PromoCarousel() {
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerLeave={handlePointerUp}
+        onClickCapture={(e) => {
+          // A real drag shouldn't also fire the poster's click-through link.
+          if (movedRef.current) e.preventDefault();
+        }}
       >
         <div
           className={`flex ${isDragging ? "" : "transition-transform duration-500 ease-out"}`}
@@ -140,8 +156,14 @@ export default function PromoCarousel() {
                 className="shrink-0"
                 style={{ width: itemWidth, marginRight: GAP }}
               >
-                <div
-                  className={`relative overflow-hidden rounded-2xl border border-border bg-surface transition-all duration-500 ${
+                <a
+                  href={item.watchUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label={`${item.title} — ${item.ott}에서 보기`}
+                  draggable={false}
+                  onDragStart={(e) => e.preventDefault()}
+                  className={`relative block overflow-hidden rounded-2xl border border-border bg-surface transition-all duration-500 select-none ${
                     isActive ? "scale-100 opacity-100" : "scale-[0.92] opacity-50"
                   }`}
                   style={{ height: itemHeight }}
@@ -164,7 +186,7 @@ export default function PromoCarousel() {
                     </span>
                     <p className="mt-1 line-clamp-1 text-xs font-semibold text-white">{item.title}</p>
                   </div>
-                </div>
+                </a>
               </div>
             );
           })}

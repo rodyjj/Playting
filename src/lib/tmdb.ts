@@ -8,7 +8,7 @@ type TmdbSearchResult = {
   media_type?: string;
 };
 
-async function tmdbGet(path: string, params: Record<string, string>) {
+async function tmdbGet(path: string, params: Record<string, string>, revalidateSeconds = 60 * 60 * 24) {
   const apiKey = process.env.TMDB_API_KEY;
   if (!apiKey) return null;
 
@@ -20,7 +20,7 @@ async function tmdbGet(path: string, params: Record<string, string>) {
   });
 
   const res = await fetch(`${TMDB_BASE}${path}?${qs.toString()}`, {
-    next: { revalidate: 60 * 60 * 24 },
+    next: { revalidate: revalidateSeconds },
   });
   if (!res.ok) return null;
   return res.json();
@@ -126,19 +126,53 @@ export type TitleDetails = {
   watchUrl: string | null;
 };
 
-// Maps TMDB's (usually English) watch-provider names to this app's Korean OTT display names.
+// Maps TMDB's (usually English) watch-provider names to this app's Korean OTT
+// display names. Keyed lowercase and looked up lowercase — TMDB's own provider
+// data is inconsistently cased (e.g. "wavve" vs "Watcha"), so exact-case
+// matching silently drops known providers.
 const OTT_NAME_MAP: Record<string, string> = {
-  Netflix: "넷플릭스",
-  "Disney Plus": "디즈니+",
-  "Coupang Play": "쿠팡플레이",
-  "Apple TV Plus": "Apple TV",
-  "Apple TV+": "Apple TV",
-  TVING: "티빙",
-  Watcha: "왓챠",
-  Wavve: "웨이브",
-  Laftel: "라프텔",
-  "Amazon Prime Video": "프라임비디오",
-  "Prime Video": "프라임비디오",
+  netflix: "넷플릭스",
+  "disney plus": "디즈니+",
+  "coupang play": "쿠팡플레이",
+  "apple tv": "Apple TV",
+  "apple tv plus": "Apple TV",
+  "apple tv+": "Apple TV",
+  tving: "티빙",
+  watcha: "왓챠",
+  wavve: "웨이브",
+  laftel: "라프텔",
+  "amazon prime video": "프라임비디오",
+  "prime video": "프라임비디오",
+};
+
+// TMDB's own `watch/providers.link` only points back to a themoviedb.org
+// aggregation page (required JustWatch attribution), never to the actual OTT —
+// so we send the user straight to the provider's own site instead. Where the
+// provider's search URL format is confirmed, land directly on search results;
+// otherwise fall back to the provider's homepage (still correct, unlike TMDB).
+// Same lowercase-keyed lookup as OTT_NAME_MAP, for the same reason.
+const OTT_LINK_MAP: Record<string, { home: string; search?: (title: string) => string }> = {
+  netflix: { home: "https://www.netflix.com", search: (t) => `https://www.netflix.com/search?q=${encodeURIComponent(t)}` },
+  "disney plus": { home: "https://www.disneyplus.com", search: (t) => `https://www.disneyplus.com/search/${encodeURIComponent(t)}` },
+  "coupang play": {
+    home: "https://www.coupangplay.com",
+    search: (t) => `https://www.coupangplay.com/query?src=page_search&keyword=${encodeURIComponent(t)}`,
+  },
+  "apple tv": { home: "https://tv.apple.com", search: (t) => `https://tv.apple.com/kr/search?term=${encodeURIComponent(t)}` },
+  "apple tv plus": { home: "https://tv.apple.com", search: (t) => `https://tv.apple.com/kr/search?term=${encodeURIComponent(t)}` },
+  "apple tv+": { home: "https://tv.apple.com", search: (t) => `https://tv.apple.com/kr/search?term=${encodeURIComponent(t)}` },
+  tving: { home: "https://www.tving.com", search: (t) => `https://www.tving.com/search?keyword=${encodeURIComponent(t)}` },
+  watcha: { home: "https://watcha.com", search: (t) => `https://watcha.com/ko/search?query=${encodeURIComponent(t)}&domain=all` },
+  wavve: { home: "https://www.wavve.com", search: (t) => `https://www.wavve.com/search?searchWord=${encodeURIComponent(t)}` },
+  laftel: { home: "https://laftel.net", search: (t) => `https://laftel.net/search?keyword=${encodeURIComponent(t)}` },
+  "amazon prime video": {
+    home: "https://www.primevideo.com",
+    search: (t) => `https://www.primevideo.com/-/ko/search?ie=UTF8&phrase=${encodeURIComponent(t)}`,
+  },
+  "prime video": {
+    home: "https://www.primevideo.com",
+    search: (t) => `https://www.primevideo.com/-/ko/search?ie=UTF8&phrase=${encodeURIComponent(t)}`,
+  },
 };
 
 type TmdbCreditsResponse = {
@@ -151,17 +185,39 @@ type TmdbWatchProvidersResponse = {
 };
 
 /**
+ * Shared by `getTitleDetails` and the trending carousel: picks the first KR
+ * flatrate provider and resolves it to a display name + a link that actually
+ * lands on that provider's own site (see OTT_LINK_MAP above), falling back to
+ * TMDB's aggregation link only when the provider isn't in our map.
+ */
+function resolveWatchInfo(
+  providers: TmdbWatchProvidersResponse | null,
+  title: string
+): { ottName: string | null; watchUrl: string | null } {
+  const providerName = providers?.results?.KR?.flatrate?.[0]?.provider_name;
+  const providerKey = providerName?.toLowerCase() ?? null;
+  const ottName = providerKey ? (OTT_NAME_MAP[providerKey] ?? providerName ?? null) : null;
+  const linkInfo = providerKey ? OTT_LINK_MAP[providerKey] : undefined;
+  const watchUrl = linkInfo ? (linkInfo.search ? linkInfo.search(title) : linkInfo.home) : (providers?.results?.KR?.link ?? null);
+  return { ottName, watchUrl };
+}
+
+/**
  * Director, top cast, KR streaming provider, and a "watch now" link for the
- * menu-board detail card. `watchUrl` is TMDB's JustWatch-attributed aggregation
- * link (the only "where to watch" deep link available without each OTT's own
- * API) — it lands the user on a page listing exactly where the title streams.
+ * menu-board detail card. `watchUrl` points at the provider's own site
+ * (search results where the URL format is confirmed, otherwise its homepage)
+ * rather than TMDB's `watch/providers.link`, which only lands on a
+ * themoviedb.org aggregation page (JustWatch attribution requirement), never
+ * on the actual OTT.
  */
 export async function getTitleDetails({
   id,
   mediaType,
+  title,
 }: {
   id: number;
   mediaType: "movie" | "tv";
+  title: string;
 }): Promise<TitleDetails> {
   const [credits, providers] = await Promise.all([
     tmdbGet(`/${mediaType}/${id}/credits`, {}) as Promise<TmdbCreditsResponse | null>,
@@ -174,9 +230,69 @@ export async function getTitleDetails({
     .map((member) => member.name)
     .filter((name): name is string => Boolean(name));
 
-  const providerName = providers?.results?.KR?.flatrate?.[0]?.provider_name;
-  const ottName = providerName ? (OTT_NAME_MAP[providerName] ?? providerName) : null;
-  const watchUrl = providers?.results?.KR?.link ?? null;
+  const { ottName, watchUrl } = resolveWatchInfo(providers, title);
 
   return { director, cast, ottName, watchUrl };
+}
+
+export type TrendingTitle = {
+  id: number;
+  title: string;
+  year?: number;
+  mediaType: "movie" | "tv";
+  posterUrl: string;
+  ott: string;
+  watchUrl: string;
+};
+
+type TmdbTrendingResult = {
+  id: number;
+  media_type?: string;
+  title?: string;
+  name?: string;
+  release_date?: string;
+  first_air_date?: string;
+  poster_path?: string | null;
+};
+
+/**
+ * Live "지금 뜨는" carousel data — TMDB's daily trending list (refreshed
+ * hourly here, since trending itself only moves day-to-day) filtered down to
+ * titles that actually stream on a recognized KR OTT, so every card's badge
+ * and click-through link point somewhere real.
+ */
+export async function getTrendingWithWatchLinks(limit = 15): Promise<TrendingTitle[]> {
+  // Most trending titles aren't actually streaming in Korea yet, so a single
+  // 20-result page rarely survives the KR-availability filter below with
+  // enough left for a full carousel — pull a few pages of the pool up front.
+  const pages = await Promise.all(
+    [1, 2, 3].map((page) => tmdbGet("/trending/all/day", { page: String(page) }, 60 * 60))
+  );
+  const candidates = pages
+    .flatMap((data) => (data?.results ?? []) as TmdbTrendingResult[])
+    .filter((r) => (r.media_type === "movie" || r.media_type === "tv") && r.poster_path);
+
+  const resolved = await Promise.all(
+    candidates.map(async (r): Promise<TrendingTitle | null> => {
+      const mediaType = r.media_type === "movie" ? "movie" : "tv";
+      const title = r.title ?? r.name ?? "";
+      const providers = (await tmdbGet(`/${mediaType}/${r.id}/watch/providers`, {})) as TmdbWatchProvidersResponse | null;
+      const { ottName, watchUrl } = resolveWatchInfo(providers, title);
+      const dateStr = r.release_date ?? r.first_air_date;
+      const year = dateStr && dateStr.length >= 4 ? Number(dateStr.slice(0, 4)) : undefined;
+
+      if (!title || !ottName || !watchUrl || !r.poster_path) return null;
+      return {
+        id: r.id,
+        title,
+        year,
+        mediaType,
+        posterUrl: `${TMDB_IMAGE_BASE}${r.poster_path}`,
+        ott: ottName,
+        watchUrl,
+      };
+    })
+  );
+
+  return resolved.filter((item): item is TrendingTitle => item !== null).slice(0, limit);
 }

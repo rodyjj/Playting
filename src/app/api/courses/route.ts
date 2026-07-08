@@ -16,7 +16,17 @@ export async function POST(request: Request) {
     return NextResponse.json({ configured: true, courses: [] });
   }
 
-  const courses = await generateCourses({ genres, people, subscribedOtt }).catch(() => []);
+  let failed = false;
+  const courses = await generateCourses({ genres, people, subscribedOtt }).catch(() => {
+    failed = true;
+    return [];
+  });
+
+  if (failed) {
+    // Distinguishes "Gemini errored" from "legitimately nothing to recommend"
+    // so the home screen can offer a retry instead of silently showing nothing.
+    return NextResponse.json({ configured: true, courses: [], error: true });
+  }
 
   const resolved = await Promise.all(
     courses.map(async (course) => {

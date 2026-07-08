@@ -127,7 +127,9 @@ export default function CourseBuilder() {
 
     setMainDishDetails(null);
     setDetailsLoading(true);
-    fetch(`/api/title-details?id=${suggestion.id}&mediaType=${suggestion.mediaType}`)
+    fetch(
+      `/api/title-details?id=${suggestion.id}&mediaType=${suggestion.mediaType}&title=${encodeURIComponent(suggestion.title)}`
+    )
       .then((res) => res.json())
       .then((json) => setMainDishDetails(json))
       .catch(() => setMainDishDetails(null))

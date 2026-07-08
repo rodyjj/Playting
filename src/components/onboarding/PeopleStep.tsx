@@ -72,14 +72,27 @@ export default function PeopleStep({
       }
     >
       <div className="flex flex-col gap-3">
-        <input
-          type="text"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="이름을 입력하고 Enter를 눌러주세요"
-          className="w-full rounded-2xl border border-border bg-surface px-4 py-3.5 text-sm text-foreground placeholder:text-muted focus:border-accent-light focus:outline-none"
-        />
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="이름을 입력해주세요"
+            className="min-w-0 flex-1 rounded-2xl border border-border bg-surface px-4 py-3.5 text-sm text-foreground placeholder:text-muted focus:border-accent-light focus:outline-none"
+          />
+          <button
+            type="button"
+            onClick={() => {
+              addPerson(input);
+              setInput("");
+            }}
+            disabled={!input.trim()}
+            className="shrink-0 rounded-2xl border border-accent-light px-4 py-3.5 text-sm font-semibold text-accent-light transition-colors active:scale-95 disabled:opacity-40"
+          >
+            태그 적용
+          </button>
+        </div>
         {people.length > 0 && (
           <div className="flex flex-wrap gap-2">
             {people.map((person) => (
