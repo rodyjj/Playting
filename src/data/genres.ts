@@ -1,0 +1,41 @@
+export type Genre = {
+  id: string;
+  label: string;
+};
+
+export const GENRES: Genre[] = [
+  { id: "romance", label: "로맨스" },
+  { id: "comedy", label: "코미디" },
+  { id: "action", label: "액션" },
+  { id: "thriller", label: "스릴러" },
+  { id: "sf", label: "SF" },
+  { id: "fantasy", label: "판타지" },
+  { id: "drama", label: "드라마" },
+  { id: "documentary", label: "다큐멘터리" },
+  { id: "animation", label: "애니메이션" },
+  { id: "horror", label: "공포" },
+  { id: "mystery", label: "미스터리" },
+  { id: "crime", label: "범죄" },
+  { id: "family", label: "가족" },
+  { id: "musical", label: "뮤지컬" },
+  { id: "coming-of-age", label: "성장" },
+  { id: "healing", label: "힐링" },
+  { id: "noir", label: "느와르" },
+  { id: "sports", label: "스포츠" },
+  { id: "war", label: "전쟁" },
+  { id: "historical", label: "사극" },
+  { id: "espionage", label: "첩보" },
+  { id: "disaster", label: "재난" },
+  { id: "occult", label: "오컬트" },
+  { id: "teen", label: "하이틴" },
+  { id: "sitcom", label: "시트콤" },
+  { id: "legal", label: "법정" },
+  { id: "medical", label: "의학" },
+  { id: "music", label: "음악" },
+  { id: "cooking", label: "요리" },
+  { id: "survival", label: "서바이벌" },
+  { id: "reality", label: "리얼리티" },
+  { id: "martial-arts", label: "무협" },
+  { id: "political", label: "정치" },
+  { id: "adventure", label: "모험" },
+];
