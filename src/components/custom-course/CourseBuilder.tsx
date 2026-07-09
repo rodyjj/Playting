@@ -53,6 +53,9 @@ export default function CourseBuilder() {
   const [hoveredSuggestion, setHoveredSuggestion] = useState<TitleSuggestion | null>(null);
   const cursorTooltipRef = useRef<HTMLDivElement>(null);
   const searchWrapperRef = useRef<HTMLDivElement>(null);
+  const menuBoxRef = useRef<HTMLDivElement>(null);
+  const menuContentRef = useRef<HTMLDivElement>(null);
+  const [menuScale, setMenuScale] = useState(1);
 
   // Kept fresh so the 1.2s "processing" wait in handleSubmit can snapshot whatever
   // the user last saw, even if a toggle or the details fetch changes mid-wait.
@@ -68,6 +71,37 @@ export default function CourseBuilder() {
   useEffect(() => {
     includeDessertRef.current = includeDessert;
   }, [includeDessert]);
+
+  // The menu board's own box always scales correctly with viewport width
+  // (fixed aspect-ratio), but its *content* (fonts, poster, gaps) is sized in
+  // absolute px/rem — on a narrower/shorter box that content no longer fits,
+  // pushing "디저트" past the bottom edge where overflow-hidden hides it.
+  // Rather than rewriting every size as a relative unit, measure the
+  // content's natural height and scale the whole block down to fit whenever
+  // it would otherwise overflow (transform doesn't affect layout size, so
+  // this keeps re-measuring the true natural height, not the scaled one).
+  useEffect(() => {
+    const box = menuBoxRef.current;
+    const content = menuContentRef.current;
+    if (!box || !content) return;
+
+    const recompute = () => {
+      // box.clientHeight includes its own top+bottom padding (py-4), which
+      // the content wrapper sits inside of rather than spans — the available
+      // height for content is that minus the padding, not the full box.
+      const boxStyle = getComputedStyle(box);
+      const verticalPadding = parseFloat(boxStyle.paddingTop) + parseFloat(boxStyle.paddingBottom);
+      const availableHeight = box.clientHeight - verticalPadding;
+      const contentHeight = content.scrollHeight;
+      setMenuScale(contentHeight > availableHeight ? availableHeight / contentHeight : 1);
+    };
+
+    const observer = new ResizeObserver(recompute);
+    observer.observe(box);
+    observer.observe(content);
+    recompute();
+    return () => observer.disconnect();
+  }, [mainDishSelected, mainDishDetails, detailsLoading, includeAppetizer, includeDessert]);
 
   const trackCursor = (e: React.MouseEvent) => {
     const el = cursorTooltipRef.current;
@@ -190,6 +224,7 @@ export default function CourseBuilder() {
           {activeTab === "immersion" && (
             <div className="flex flex-col gap-4">
               <div
+                ref={menuBoxRef}
                 className="relative overflow-hidden rounded-2xl border border-amber-500/30 px-5 py-4"
                 style={{ aspectRatio: "1056 / 1489" }}
               >
@@ -201,7 +236,16 @@ export default function CourseBuilder() {
                   className="object-cover"
                   priority
                 />
-                <div className="relative z-10">
+                <div
+                  ref={menuContentRef}
+                  // overflow-hidden here isn't for clipping (the outer box already
+                  // clips) — it establishes a new block-formatting context so the
+                  // "MENU" title's mt-6 can't margin-collapse through this wrapper
+                  // and shift its measured top edge away from where the transform
+                  // origin (and the scale-to-fit math above) assumes it starts.
+                  className="relative z-10 overflow-hidden"
+                  style={{ transform: `scale(${menuScale})`, transformOrigin: "top left" }}
+                >
                   <p className={`${cinzel.className} mt-6 text-center text-2xl font-semibold tracking-[0.3em] text-black`}>
                     MENU
                   </p>
@@ -290,9 +334,10 @@ export default function CourseBuilder() {
               </div>
 
               <div className="flex flex-col gap-2">
-                <span className="text-sm font-medium text-foreground">
-                  메인디쉬 <span className="text-accent-light">*필수</span>
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium text-foreground">메인디쉬</span>
+                  <span className="text-xs font-medium text-accent-light">*필수</span>
+                </div>
 
                 <div ref={searchWrapperRef} className="relative">
                   <input

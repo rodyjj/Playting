@@ -1,13 +1,31 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 
 type Slide = {
   eyebrow: string;
   title: string;
   description: string;
+  // Full-bleed slides carry all their own copy baked into the artwork, so no
+  // eyebrow/title/description is rendered — title is kept only as alt text.
+  // bgColor matches the image's own bottom edge, since object-contain
+  // anchored to the top means any leftover space (aspect-ratio dependent)
+  // always lands at the bottom, right up against that edge.
+  image?: string;
+  bgColor?: string;
+  // Ignores FOOTER_HEIGHT entirely and covers the full screen (object-cover,
+  // cropping instead of letterboxing) — the footer floats on top of it
+  // instead of sitting on its own reserved strip below.
+  fullBleed?: boolean;
 };
+
+// Fixed footer height (dots + gap + button + its own padding) — used to give
+// every non-full-bleed slide the same usable height it always had, now that
+// the track spans the whole screen so the one full-bleed slide can reach the
+// bottom edge. The footer's own content has no responsive height variance
+// (single-line label, fixed paddings), so this stays accurate across widths.
+const FOOTER_HEIGHT = 126;
 
 const SLIDES: Slide[] = [
   {
@@ -15,23 +33,25 @@ const SLIDES: Slide[] = [
     title: "당신의 취향, 한 접시에",
     description:
       "영화, 드라마, 애니메이션, 예능까지. 흩어진 취향을 하나의 코스로 담아드려요.",
+    image: "/table/onboarding-1.png",
+    bgColor: "#01010c",
   },
   {
     eyebrow: "Any Platform",
     title: "플랫폼은 신경 쓰지 마세요",
     description:
       "넷플릭스부터 라프텔까지, 어디에 있든 당신에게 맞는 작품을 찾아 안내해드려요.",
+    image: "/table/onboarding-2.png",
+    bgColor: "#1f110e",
+    fullBleed: true,
   },
   {
     eyebrow: "AI Course",
     title: "AI 셰프가 차려주는 감상 코스",
     description:
       "그날의 기분과 취향에 맞춰 AI가 매번 다른 감상 코스를 구성해드려요.",
-  },
-  {
-    eyebrow: "Get Started",
-    title: "이제, 당신의 취향을 알려주세요",
-    description: "몇 가지 질문에 답하면 나만의 코스가 준비돼요.",
+    image: "/table/onboarding-3.png",
+    bgColor: "#010c24",
   },
 ];
 
@@ -40,6 +60,24 @@ export default function IntroSlides({ onComplete }: { onComplete: () => void }) 
   const dragStartX = useRef<number | null>(null);
   const dragDeltaX = useRef(0);
   const [isDragging, setIsDragging] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [containerWidth, setContainerWidth] = useState(0);
+
+  // Percentage-based translateX/width (100%, w-full) lets the browser round
+  // the container's box and each slide's box independently — on a non-integer
+  // CSS width (e.g. 375.2px) those roundings can disagree by a device pixel,
+  // which shows up as a hairline sliver of the neighboring slide right after
+  // a swipe. Measuring once and driving both the track offset and each
+  // slide's width off the same JS number (in px) removes that ambiguity.
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver((entries) => {
+      setContainerWidth(entries[0].contentRect.width);
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   const isLast = index === SLIDES.length - 1;
 
@@ -75,9 +113,17 @@ export default function IntroSlides({ onComplete }: { onComplete: () => void }) 
   };
 
   return (
-    <div className="flex h-full flex-col">
+    // Background follows the active slide's own color (image slides only —
+    // text slides pass no bgColor and this falls back to the page default),
+    // so the footer strip below the image reads as one continuous backdrop
+    // instead of a visible seam where the image's letterbox gap ends.
+    <div
+      className="relative h-full transition-colors duration-300"
+      style={{ backgroundColor: SLIDES[index].bgColor }}
+    >
       <div
-        className="relative flex-1 touch-pan-y select-none overflow-hidden"
+        ref={containerRef}
+        className="absolute inset-0 touch-pan-y select-none overflow-hidden"
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
@@ -85,40 +131,71 @@ export default function IntroSlides({ onComplete }: { onComplete: () => void }) 
       >
         <div
           className={`flex h-full ${isDragging ? "" : "transition-transform duration-300 ease-out"}`}
-          style={{ transform: `translateX(-${index * 100}%)` }}
+          style={{ transform: `translateX(${-(index * containerWidth)}px)` }}
         >
-          {SLIDES.map((slide) => (
-            <div
-              key={slide.title}
-              className="flex h-full w-full flex-shrink-0 flex-col items-center justify-center gap-8 px-8 text-center"
-            >
-              <Image
-                src="/playting-logo.png"
-                alt="Playting"
-                width={168}
-                height={168}
-                priority
-                className="h-40 w-40 rounded-3xl sm:h-48 sm:w-48"
-              />
-              <div className="flex flex-col items-center gap-3">
-                {slide.eyebrow && (
-                  <span className="text-xs font-semibold uppercase tracking-[0.2em] text-accent-light">
-                    {slide.eyebrow}
-                  </span>
-                )}
-                <h1 className="text-2xl font-bold text-foreground sm:text-3xl">
-                  {slide.title}
-                </h1>
-                <p className="max-w-xs text-sm leading-relaxed text-muted sm:text-base">
-                  {slide.description}
-                </p>
+          {SLIDES.map((slide, slideIndex) =>
+            slide.image ? (
+              <div key={slide.title} className="h-full flex-shrink-0" style={{ width: containerWidth || "100%" }}>
+                <div
+                  className="relative w-full"
+                  style={{
+                    // Full-bleed slide keeps its full height and reaches the
+                    // true bottom edge; every other slide reserves the same
+                    // strip the footer used to occupy in-flow, so its image
+                    // still sizes exactly as it did before the footer became
+                    // a floating overlay.
+                    height: slide.fullBleed ? "100%" : `calc(100% - ${FOOTER_HEIGHT}px)`,
+                    backgroundColor: slide.bgColor,
+                  }}
+                >
+                  <Image
+                    src={slide.image}
+                    alt={slide.title}
+                    fill
+                    sizes="(max-width: 430px) 100vw, 430px"
+                    priority={slideIndex === 0}
+                    className={slide.fullBleed ? "object-cover" : "object-contain object-top"}
+                  />
+                </div>
               </div>
-            </div>
-          ))}
+            ) : (
+              <div key={slide.title} className="h-full flex-shrink-0" style={{ width: containerWidth || "100%" }}>
+                <div
+                  className="flex w-full flex-col items-center justify-center gap-8 px-8 text-center"
+                  style={{ height: `calc(100% - ${FOOTER_HEIGHT}px)` }}
+                >
+                  <Image
+                    src="/playting-logo.png"
+                    alt="Playting"
+                    width={168}
+                    height={168}
+                    className="h-40 w-40 rounded-3xl sm:h-48 sm:w-48"
+                  />
+                  <div className="flex flex-col items-center gap-3">
+                    {slide.eyebrow && (
+                      <span className="text-xs font-semibold uppercase tracking-[0.2em] text-accent-light">
+                        {slide.eyebrow}
+                      </span>
+                    )}
+                    <h1 className="text-2xl font-bold text-foreground sm:text-3xl">
+                      {slide.title}
+                    </h1>
+                    <p className="max-w-xs text-sm leading-relaxed text-muted sm:text-base">
+                      {slide.description}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )
+          )}
         </div>
       </div>
 
-      <div className="flex flex-col items-center gap-6 px-8 pb-10 pt-2">
+      <div
+        className={`absolute inset-x-0 bottom-0 z-10 flex flex-col items-center gap-6 px-8 pb-10 pt-2 ${
+          SLIDES[index].fullBleed ? "backdrop-blur-md bg-gradient-to-t from-black/55 via-black/25 to-transparent" : ""
+        }`}
+      >
         <div className="flex items-center gap-2">
           {SLIDES.map((slide, i) => (
             <button

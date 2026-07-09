@@ -308,3 +308,286 @@ export async function getTrendingWithWatchLinks(limit = 15): Promise<TrendingTit
 
   return deduped.slice(0, limit);
 }
+
+// "꿀맛 랭킹" platform tabs — only platforms TMDB actually tracks as a KR watch
+// provider are listed here (confirmed via /watch/providers/{movie,tv}). 라프텔
+// and 씨네폭스 have no TMDB coverage, so they're deliberately absent; the
+// route/UI show a "not yet supported" state for those slugs instead of
+// silently returning nothing.
+export type RankingPlatformSlug =
+  | "netflix"
+  | "disney-plus"
+  | "coupang-play"
+  | "apple-tv"
+  | "tving"
+  | "watcha"
+  | "wavve"
+  | "prime-video";
+
+const RANKING_PLATFORM_TMDB: Record<RankingPlatformSlug, { providerId: number; tmdbKey: string }> = {
+  netflix: { providerId: 8, tmdbKey: "netflix" },
+  "disney-plus": { providerId: 337, tmdbKey: "disney plus" },
+  "coupang-play": { providerId: 1881, tmdbKey: "coupang play" },
+  "apple-tv": { providerId: 350, tmdbKey: "apple tv" },
+  tving: { providerId: 1883, tmdbKey: "tving" },
+  watcha: { providerId: 97, tmdbKey: "watcha" },
+  wavve: { providerId: 356, tmdbKey: "wavve" },
+  "prime-video": { providerId: 119, tmdbKey: "prime video" },
+};
+
+export function isRankingPlatformSupported(slug: string): slug is RankingPlatformSlug {
+  return slug in RANKING_PLATFORM_TMDB;
+}
+
+export type RankingTitle = {
+  rank: number;
+  id: number;
+  mediaType: "movie" | "tv";
+  title: string;
+  year?: number;
+  posterUrl: string;
+  popularity: number;
+  ott: string;
+  watchUrl: string;
+};
+
+type RawRankingItem = Omit<RankingTitle, "rank">;
+
+type TmdbDiscoverResult = {
+  id: number;
+  title?: string;
+  name?: string;
+  release_date?: string;
+  first_air_date?: string;
+  poster_path?: string | null;
+  popularity?: number;
+};
+
+/**
+ * A platform's currently-popular titles straight from TMDB's discover
+ * endpoint, filtered to that provider's KR catalog and pre-sorted by
+ * popularity. Unlike the trending carousel above, this needs no per-title
+ * watch/providers lookup — the provider filter already guarantees
+ * availability, so one request per media type is the whole cost.
+ */
+async function discoverByProvider(
+  providerId: number,
+  mediaType: "movie" | "tv",
+  tmdbKey: string
+): Promise<RawRankingItem[]> {
+  const data = await tmdbGet(
+    `/discover/${mediaType}`,
+    { watch_region: "KR", with_watch_providers: String(providerId), sort_by: "popularity.desc" },
+    60 * 30 // 30 min — fresh enough for a "live" ranking without hammering the free tier
+  );
+  const results = (data?.results ?? []) as TmdbDiscoverResult[];
+  const linkInfo = OTT_LINK_MAP[tmdbKey];
+  const ottName = OTT_NAME_MAP[tmdbKey] ?? tmdbKey;
+
+  return results
+    .filter((r) => r.poster_path)
+    .map((r): RawRankingItem => {
+      const title = r.title ?? r.name ?? "";
+      const dateStr = r.release_date ?? r.first_air_date;
+      const year = dateStr && dateStr.length >= 4 ? Number(dateStr.slice(0, 4)) : undefined;
+      return {
+        id: r.id,
+        mediaType,
+        title,
+        year,
+        posterUrl: `${TMDB_IMAGE_BASE}${r.poster_path}`,
+        popularity: r.popularity ?? 0,
+        ott: ottName,
+        watchUrl: linkInfo ? (linkInfo.search ? linkInfo.search(title) : linkInfo.home) : "",
+      };
+    })
+    .filter((item) => item.title);
+}
+
+function dedupeAndRank(items: RawRankingItem[], limit: number): RankingTitle[] {
+  const seen = new Set<string>();
+  const deduped: RawRankingItem[] = [];
+  for (const item of [...items].sort((a, b) => b.popularity - a.popularity)) {
+    const key = `${item.mediaType}-${item.id}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(item);
+  }
+  return deduped.slice(0, limit).map((item, i) => ({ ...item, rank: i + 1 }));
+}
+
+/** One platform's live popularity ranking (movies + TV merged into a single list). */
+export async function getPlatformRanking(slug: RankingPlatformSlug, limit = 20): Promise<RankingTitle[]> {
+  const { providerId, tmdbKey } = RANKING_PLATFORM_TMDB[slug];
+  const [movies, shows] = await Promise.all([
+    discoverByProvider(providerId, "movie", tmdbKey),
+    discoverByProvider(providerId, "tv", tmdbKey),
+  ]);
+  return dedupeAndRank([...movies, ...shows], limit);
+}
+
+/**
+ * "통합 랭킹" — re-ranks the union of every supported platform's pool by
+ * popularity. Reuses the same cached discover calls each platform tab makes
+ * (Next's fetch cache dedupes by URL), so this costs nothing extra once the
+ * individual platform tabs have been hit once in the current cache window.
+ */
+export async function getCombinedRanking(limit = 20): Promise<RankingTitle[]> {
+  const slugs = Object.keys(RANKING_PLATFORM_TMDB) as RankingPlatformSlug[];
+  const perPlatform = await Promise.all(slugs.map((slug) => getPlatformRanking(slug, 40)));
+  return dedupeAndRank(perPlatform.flat(), limit);
+}
+
+// ---- Home carousel: balanced across platform AND format ----
+
+export type HomeCarouselCategory = "movie" | "drama" | "anime" | "variety";
+
+export type HomeCarouselTitle = {
+  id: number;
+  mediaType: "movie" | "tv";
+  title: string;
+  year?: number;
+  posterUrl: string;
+  ott: string;
+  watchUrl: string;
+  category: HomeCarouselCategory;
+  popularity: number;
+};
+
+// TMDB genre ids (shared across /movie and /tv discover responses).
+const ANIME_GENRE_ID = 16; // "Animation" — TMDB has no separate live-action/anime split
+const VARIETY_GENRE_IDS = new Set([10764, 10767]); // Reality, Talk — closest match to "예능"
+
+function classifyCarouselCategory(mediaType: "movie" | "tv", genreIds: number[]): HomeCarouselCategory {
+  if (genreIds.includes(ANIME_GENRE_ID)) return "anime";
+  if (mediaType === "movie") return "movie";
+  if (genreIds.some((id) => VARIETY_GENRE_IDS.has(id))) return "variety";
+  return "drama";
+}
+
+type TmdbDiscoverResultWithGenre = TmdbDiscoverResult & { genre_ids?: number[] };
+
+/**
+ * Same discover-by-provider approach as `discoverByProvider` above (one
+ * request per media type, no per-title watch/providers lookup needed), but
+ * also keeps `genre_ids` so results can be bucketed into the four home-feed
+ * categories below.
+ */
+async function discoverForCarousel(
+  providerId: number,
+  mediaType: "movie" | "tv",
+  tmdbKey: string
+): Promise<HomeCarouselTitle[]> {
+  const data = await tmdbGet(
+    `/discover/${mediaType}`,
+    { watch_region: "KR", with_watch_providers: String(providerId), sort_by: "popularity.desc" },
+    60 * 60
+  );
+  const results = (data?.results ?? []) as TmdbDiscoverResultWithGenre[];
+  const linkInfo = OTT_LINK_MAP[tmdbKey];
+  const ottName = OTT_NAME_MAP[tmdbKey] ?? tmdbKey;
+
+  return results
+    .filter((r) => r.poster_path)
+    .map((r): HomeCarouselTitle => {
+      const title = r.title ?? r.name ?? "";
+      const dateStr = r.release_date ?? r.first_air_date;
+      const year = dateStr && dateStr.length >= 4 ? Number(dateStr.slice(0, 4)) : undefined;
+      return {
+        id: r.id,
+        mediaType,
+        title,
+        year,
+        posterUrl: `${TMDB_IMAGE_BASE}${r.poster_path}`,
+        ott: ottName,
+        watchUrl: linkInfo ? (linkInfo.search ? linkInfo.search(title) : linkInfo.home) : "",
+        category: classifyCarouselCategory(mediaType, r.genre_ids ?? []),
+        popularity: r.popularity ?? 0,
+      };
+    })
+    .filter((item) => item.title);
+}
+
+const CAROUSEL_CATEGORIES: HomeCarouselCategory[] = ["movie", "drama", "anime", "variety"];
+
+/**
+ * The home carousel used to just take TMDB's raw daily trending list, which
+ * skews heavily toward whatever single format/platform happens to be
+ * globally trending that day (in practice, mostly anime) — not a great look
+ * for a service whose whole pitch is "every platform, every format, evenly".
+ *
+ * This instead pools currently-popular titles from every supported platform
+ * (same 8 as the 꿀맛 랭킹 tabs), tags each with a format category, and picks
+ * an even split per category (movie/drama/anime/variety). Within each
+ * category, platforms already picked from earlier categories are
+ * deprioritized (not excluded — falls back to them if a category has fewer
+ * than 4 distinct platforms available) so the full set also spreads across
+ * platforms rather than clustering on whichever one dominates a category.
+ */
+export async function getBalancedHomeCarousel(limit = 16): Promise<HomeCarouselTitle[]> {
+  const slugs = Object.keys(RANKING_PLATFORM_TMDB) as RankingPlatformSlug[];
+  const perPlatform = await Promise.all(
+    slugs.map(async (slug) => {
+      const { providerId, tmdbKey } = RANKING_PLATFORM_TMDB[slug];
+      const [movies, shows] = await Promise.all([
+        discoverForCarousel(providerId, "movie", tmdbKey),
+        discoverForCarousel(providerId, "tv", tmdbKey),
+      ]);
+      return [...movies, ...shows];
+    })
+  );
+
+  const seen = new Set<string>();
+  const pool = perPlatform.flat().filter((item) => {
+    const key = `${item.mediaType}-${item.id}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
+  const perCategory = Math.max(1, Math.floor(limit / CAROUSEL_CATEGORIES.length));
+  const platformCounts = new Map<string, number>();
+  const byCategory = new Map<HomeCarouselCategory, HomeCarouselTitle[]>();
+
+  for (const category of CAROUSEL_CATEGORIES) {
+    const candidates = pool
+      .filter((item) => item.category === category)
+      .sort((a, b) => {
+        const usageDiff = (platformCounts.get(a.ott) ?? 0) - (platformCounts.get(b.ott) ?? 0);
+        return usageDiff !== 0 ? usageDiff : b.popularity - a.popularity;
+      });
+
+    const chosen: HomeCarouselTitle[] = [];
+    const usedPlatforms = new Set<string>();
+    for (const item of candidates) {
+      if (chosen.length >= perCategory) break;
+      if (usedPlatforms.has(item.ott)) continue;
+      chosen.push(item);
+      usedPlatforms.add(item.ott);
+    }
+    // Category has fewer distinct platforms than the quota — fill the rest
+    // regardless of platform repeats rather than leaving the slot empty.
+    for (const item of candidates) {
+      if (chosen.length >= perCategory) break;
+      if (chosen.includes(item)) continue;
+      chosen.push(item);
+    }
+
+    for (const item of chosen) platformCounts.set(item.ott, (platformCounts.get(item.ott) ?? 0) + 1);
+    byCategory.set(category, chosen);
+  }
+
+  // Interleave (movie[0], drama[0], anime[0], variety[0], movie[1], ...)
+  // instead of returning four same-category blocks back to back — the ratio
+  // is already even either way, but this keeps the actual swipe-through feed
+  // from feeling like four separate reels glued together.
+  const picked: HomeCarouselTitle[] = [];
+  for (let i = 0; i < perCategory; i++) {
+    for (const category of CAROUSEL_CATEGORIES) {
+      const item = byCategory.get(category)?.[i];
+      if (item) picked.push(item);
+    }
+  }
+
+  return picked.slice(0, limit);
+}

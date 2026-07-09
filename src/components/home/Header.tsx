@@ -4,7 +4,7 @@ import Link from "next/link";
 export default function Header() {
   return (
     <header className="flex items-center px-6 pt-6">
-      <Link href="/" aria-label="홈으로 이동">
+      <Link href="/" aria-label="홈으로 이동" className="inline-flex items-center pr-8">
         <Image
           src="/playting-wordmark.png"
           alt="Playting"

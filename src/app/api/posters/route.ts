@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getTrendingWithWatchLinks, isTmdbConfigured, searchPoster, type PosterMediaType } from "@/lib/tmdb";
+import { getBalancedHomeCarousel, isTmdbConfigured, searchPoster, type PosterMediaType } from "@/lib/tmdb";
 
 export async function GET(request: Request) {
   const configured = isTmdbConfigured();
@@ -23,8 +23,8 @@ export async function GET(request: Request) {
     return NextResponse.json({ configured: true, posterUrl });
   }
 
-  // Batch mode — live trending titles for the promo carousel (see getTrendingWithWatchLinks).
-  const items = await getTrendingWithWatchLinks(15);
+  // Batch mode — live carousel titles, balanced across platform and format (see getBalancedHomeCarousel).
+  const items = await getBalancedHomeCarousel(16);
 
   return NextResponse.json({ configured: true, items });
 }
