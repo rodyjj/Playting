@@ -294,5 +294,17 @@ export async function getTrendingWithWatchLinks(limit = 15): Promise<TrendingTit
     })
   );
 
-  return resolved.filter((item): item is TrendingTitle => item !== null).slice(0, limit);
+  // TMDB ids are only unique within a media type — a movie and a tv show can
+  // share the same numeric id — so dedupe on the (id, mediaType) pair rather
+  // than id alone, otherwise both survive and collide as React list keys.
+  const seen = new Set<string>();
+  const deduped = resolved.filter((item): item is TrendingTitle => {
+    if (!item) return false;
+    const key = `${item.mediaType}-${item.id}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
+  return deduped.slice(0, limit);
 }

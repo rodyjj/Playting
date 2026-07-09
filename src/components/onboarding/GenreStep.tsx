@@ -52,23 +52,6 @@ export default function GenreStep({
       }
     >
       <div className="flex flex-col gap-5">
-        {GENRE_CATEGORIES.map((category) => (
-          <div key={category}>
-            <p className="mb-2 text-xs font-semibold text-muted">{category}</p>
-            <div className="flex flex-wrap gap-2.5">
-              {GENRES.filter((genre) => genre.category === category).map((genre) => (
-                <button
-                  key={genre.id}
-                  onClick={() => onToggle(genre.id)}
-                  className={genreButtonClass(selected.includes(genre.id))}
-                >
-                  #{genre.label}
-                </button>
-              ))}
-            </div>
-          </div>
-        ))}
-
         <div>
           <p className="mb-2 text-xs font-semibold text-muted">직접 입력</p>
           <div className="flex gap-2">
@@ -104,6 +87,23 @@ export default function GenreStep({
             </div>
           )}
         </div>
+
+        {GENRE_CATEGORIES.map((category) => (
+          <div key={category}>
+            <p className="mb-2 text-xs font-semibold text-muted">{category}</p>
+            <div className="flex flex-wrap gap-2.5">
+              {GENRES.filter((genre) => genre.category === category).map((genre) => (
+                <button
+                  key={genre.id}
+                  onClick={() => onToggle(genre.id)}
+                  className={genreButtonClass(selected.includes(genre.id))}
+                >
+                  #{genre.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        ))}
       </div>
     </StepShell>
   );

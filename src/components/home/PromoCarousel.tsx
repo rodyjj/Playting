@@ -196,7 +196,7 @@ export default function PromoCarousel() {
       <div className="mt-3 flex items-center justify-center gap-1.5">
         {items.map((item, i) => (
           <button
-            key={item.id}
+            key={`${item.mediaType}-${item.id}`}
             aria-label={`${item.title} 배너로 이동`}
             onClick={() => goTo(i)}
             className={`h-1.5 rounded-full transition-all duration-300 ${
