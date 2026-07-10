@@ -6,11 +6,13 @@ import { fetchOnboardingData } from "@/lib/onboarding";
 import { OTT_PROVIDERS } from "@/data/ott-providers";
 import { RefreshIcon } from "@/components/nav/icons";
 import FavoriteButton from "@/components/common/FavoriteButton";
+import BestButton from "@/components/common/BestButton";
 
 type CourseItem = {
   title: string;
   ott: string;
   year: number;
+  mediaType: "movie" | "tv" | "anime";
   posterUrl: string;
 };
 
@@ -130,7 +132,15 @@ function CourseRow({
         dragging ? "cursor-grabbing select-none" : "cursor-grab"
       }`}
     >
-      {items.map((item) => (
+      {items.map((item) => {
+        const favoriteItem = {
+          id: `${item.mediaType}-${item.title}-${item.year}`,
+          title: item.title,
+          posterUrl: item.posterUrl,
+          year: item.year,
+          ott: item.ott,
+        };
+        return (
         <div key={item.title} className="w-32 shrink-0">
           <div className="relative aspect-[2/3] w-full overflow-hidden rounded-2xl border border-border bg-surface">
             <Image
@@ -141,15 +151,16 @@ function CourseRow({
               className="pointer-events-none object-cover select-none"
               draggable={false}
             />
-            <FavoriteButton id={`${item.title}-${item.year}`} />
+            <FavoriteButton item={favoriteItem} />
+            <BestButton item={favoriteItem} />
             {!subscribedOttNames.has(item.ott) && (
               <>
                 <div className="pointer-events-none absolute inset-0 bg-black/30" />
-                <div className="absolute left-1 right-7 top-1.5">
-                  <p className="text-center text-[11px] font-semibold leading-tight text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.85)]">
+                <div className="absolute right-1.5 bottom-1.5 z-10">
+                  <p className="text-right text-[11px] font-semibold leading-tight text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.85)]">
                     미구독 플랫폼
                     <br />
-                    서비스입니다.
+                    콘텐츠입니다.
                   </p>
                 </div>
               </>
@@ -165,7 +176,8 @@ function CourseRow({
           </div>
           <p className="mt-1.5 line-clamp-1 text-xs font-medium text-foreground">{item.title}</p>
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

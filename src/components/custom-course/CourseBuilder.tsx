@@ -289,7 +289,7 @@ export default function CourseBuilder() {
                   </p>
                   <div className="mx-auto mt-3 h-px w-14 bg-amber-500/40" />
 
-                  <div className="mt-4 flex flex-col gap-3 pl-3">
+                  <div className="mt-1 flex flex-col gap-3 pl-3">
                     <div>
                       <p
                         className={`${songMyung.className} text-lg ${
@@ -300,7 +300,7 @@ export default function CourseBuilder() {
                       </p>
                       <p
                         className={`mt-0.5 pl-4 font-sans text-xs italic ${
-                          includeAppetizer ? "text-gray-500" : "text-gray-400"
+                          includeAppetizer ? "text-gray-500" : "text-gray-400 line-through"
                         }`}
                       >
                         선택하신 영화의 PV 혹은 예고편이 제공됩니다.
@@ -361,13 +361,24 @@ export default function CourseBuilder() {
                       </div>
                     </div>
 
-                    <p
-                      className={`${songMyung.className} text-lg ${
-                        includeDessert ? "text-black" : "text-black/30 line-through"
-                      }`}
-                    >
-                      디저트
-                    </p>
+                    <div>
+                      <p
+                        className={`${songMyung.className} text-lg ${
+                          includeDessert ? "text-black" : "text-black/30 line-through"
+                        }`}
+                      >
+                        디저트
+                      </p>
+                      <p
+                        className={`mt-0.5 pl-4 font-sans text-xs italic ${
+                          includeDessert ? "text-gray-500" : "text-gray-400 line-through"
+                        }`}
+                      >
+                        셰프가 영상에 맞는
+                        <br />
+                        디저트 영상을 골라 제공해 드립니다.🧑‍🍳
+                      </p>
+                    </div>
                   </div>
                 </div>
               </div>

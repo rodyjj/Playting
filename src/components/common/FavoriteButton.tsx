@@ -1,39 +1,50 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { isFavorite, toggleFavorite } from "@/lib/favorites";
+import { isInCollection, toggleCollection, type FavoriteItem } from "@/lib/favorites";
 
-export default function FavoriteButton({ id, className = "" }: { id: string; className?: string }) {
-  const [favorited, setFavorited] = useState(false);
+/** ⭐ toggle — adds/removes `item` from "볼거에요" (watchlist). */
+export default function FavoriteButton({
+  item,
+  className = "",
+  onToggle,
+}: {
+  item: FavoriteItem;
+  className?: string;
+  onToggle?: (active: boolean) => void;
+}) {
+  const [active, setActive] = useState(false);
 
   useEffect(() => {
     // Must default to false during SSR (no `window`) and only pick up the
-    // real localStorage value once mounted in the browser — an effect (not a
-    // lazy initial state) is what keeps this from mismatching the server-rendered markup.
+    // real localStorage value once mounted in the browser, or hydration
+    // would mismatch against the server-rendered markup.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setFavorited(isFavorite(id));
-  }, [id]);
+    setActive(isInCollection("watchlist", item.id));
+  }, [item.id]);
 
   return (
     <button
       type="button"
       onClick={(event) => {
         // Posters are often wrapped in a link (search results, watch-now
-        // cards) — without this, toggling a favorite would also follow that
-        // link or bubble into the row's own drag/click handling.
+        // cards) — without this, toggling would also follow that link or
+        // bubble into the row's own drag/click handling.
         event.preventDefault();
         event.stopPropagation();
-        setFavorited(toggleFavorite(id));
+        const next = toggleCollection("watchlist", item);
+        setActive(next);
+        onToggle?.(next);
       }}
-      aria-label={favorited ? "즐겨찾기 해제" : "즐겨찾기 추가"}
-      aria-pressed={favorited}
+      aria-label={active ? "볼거에요에서 제거" : "볼거에요에 추가"}
+      aria-pressed={active}
       className={`absolute right-1.5 top-1.5 z-20 flex h-6 w-6 items-center justify-center rounded-full border border-white/80 bg-black/40 backdrop-blur-[1px] transition-transform active:scale-90 ${className}`}
     >
       <svg
         viewBox="0 0 24 24"
         className="h-3.5 w-3.5"
-        fill={favorited ? "#FACC15" : "none"}
-        stroke={favorited ? "#FACC15" : "#ffffff"}
+        fill={active ? "#FACC15" : "none"}
+        stroke={active ? "#FACC15" : "#ffffff"}
         strokeWidth="1.6"
         strokeLinejoin="round"
       >

@@ -5,6 +5,7 @@ import Image from "next/image";
 import { Song_Myung } from "next/font/google";
 import type { TitleDetails, TitleSuggestion } from "@/lib/tmdb";
 import FavoriteButton from "@/components/common/FavoriteButton";
+import BestButton from "@/components/common/BestButton";
 
 const songMyung = Song_Myung({ weight: "400" });
 
@@ -171,7 +172,26 @@ export default function CourseModal({
               {mainDish.posterUrl && (
                 <div className="relative aspect-[2/3] w-28 shrink-0 overflow-hidden rounded-lg border border-border">
                   <Image src={mainDish.posterUrl} alt={mainDish.title} fill sizes="112px" className="object-cover" />
-                  <FavoriteButton id={`${mainDish.mediaType}-${mainDish.id}`} />
+                  <FavoriteButton
+                    item={{
+                      id: `${mainDish.mediaType}-${mainDish.id}`,
+                      title: mainDish.title,
+                      posterUrl: mainDish.posterUrl,
+                      year: mainDish.year,
+                      ott: mainDishDetails?.ottName ?? undefined,
+                      watchUrl: mainDishDetails?.watchUrl ?? undefined,
+                    }}
+                  />
+                  <BestButton
+                    item={{
+                      id: `${mainDish.mediaType}-${mainDish.id}`,
+                      title: mainDish.title,
+                      posterUrl: mainDish.posterUrl,
+                      year: mainDish.year,
+                      ott: mainDishDetails?.ottName ?? undefined,
+                      watchUrl: mainDishDetails?.watchUrl ?? undefined,
+                    }}
+                  />
                 </div>
               )}
               <div className="min-w-0 flex-1 text-sm leading-relaxed text-muted">

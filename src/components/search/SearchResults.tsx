@@ -6,6 +6,7 @@ import Image from "next/image";
 import { OTT_PROVIDERS } from "@/data/ott-providers";
 import type { RelatedGroup, RelatedTitle, SearchMainTitle } from "@/lib/tmdb";
 import FavoriteButton from "@/components/common/FavoriteButton";
+import BestButton from "@/components/common/BestButton";
 
 function ottColor(ott: string) {
   return OTT_PROVIDERS.find((p) => p.name === ott)?.color ?? "#2D437A";
@@ -76,7 +77,16 @@ function RelatedRow({ items }: { items: RelatedTitle[] }) {
         dragging ? "cursor-grabbing select-none" : "cursor-grab"
       }`}
     >
-      {items.map((item) => (
+      {items.map((item) => {
+        const favoriteItem = {
+          id: `${item.mediaType}-${item.id}`,
+          title: item.title,
+          posterUrl: item.posterUrl,
+          year: item.year,
+          ott: item.ott,
+          watchUrl: item.watchUrl,
+        };
+        return (
         <a
           key={`${item.mediaType}-${item.id}`}
           href={item.watchUrl}
@@ -98,7 +108,8 @@ function RelatedRow({ items }: { items: RelatedTitle[] }) {
                 draggable={false}
               />
             )}
-            <FavoriteButton id={`${item.mediaType}-${item.id}`} />
+            <FavoriteButton item={favoriteItem} />
+            <BestButton item={favoriteItem} />
             <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent px-2 pb-2 pt-6">
               <span
                 className="inline-block rounded-full px-1.5 py-0.5 text-[9px] font-bold text-white"
@@ -111,7 +122,8 @@ function RelatedRow({ items }: { items: RelatedTitle[] }) {
           <p className="mt-1.5 line-clamp-2 text-xs font-medium text-foreground">{item.title}</p>
           {item.year && <p className="text-[11px] text-muted">{item.year}</p>}
         </a>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -122,7 +134,26 @@ function MainTitleCard({ main }: { main: SearchMainTitle }) {
       {main.posterUrl && (
         <div className="relative aspect-[2/3] w-32 shrink-0 overflow-hidden rounded-2xl border border-border bg-surface">
           <Image src={main.posterUrl} alt={main.title} fill sizes="128px" className="object-cover" />
-          <FavoriteButton id={`${main.mediaType}-${main.id}`} />
+          <FavoriteButton
+            item={{
+              id: `${main.mediaType}-${main.id}`,
+              title: main.title,
+              posterUrl: main.posterUrl,
+              year: main.year,
+              ott: main.ottName ?? undefined,
+              watchUrl: main.watchUrl ?? undefined,
+            }}
+          />
+          <BestButton
+            item={{
+              id: `${main.mediaType}-${main.id}`,
+              title: main.title,
+              posterUrl: main.posterUrl,
+              year: main.year,
+              ott: main.ottName ?? undefined,
+              watchUrl: main.watchUrl ?? undefined,
+            }}
+          />
         </div>
       )}
       <div className="flex min-w-0 flex-1 flex-col">

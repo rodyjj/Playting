@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { OTT_PROVIDERS } from "@/data/ott-providers";
+import FavoriteButton from "@/components/common/FavoriteButton";
+import BestButton from "@/components/common/BestButton";
 
 type RankingItem = {
   rank: number;
@@ -60,8 +62,28 @@ function RankingRow({ item }: { item: RankingItem }) {
         >
           {item.rank}
         </span>
-        <div className="relative h-[84px] w-[58px] shrink-0 overflow-hidden rounded-xl border border-border bg-surface">
-          <Image src={item.posterUrl} alt={item.title} fill sizes="58px" className="object-cover" />
+        <div className="relative h-[108px] w-[75px] shrink-0 overflow-hidden rounded-xl border border-border bg-surface">
+          <Image src={item.posterUrl} alt={item.title} fill sizes="75px" className="object-cover" />
+          <FavoriteButton
+            item={{
+              id: `${item.mediaType}-${item.id}`,
+              title: item.title,
+              posterUrl: item.posterUrl,
+              year: item.year,
+              ott: item.ott,
+              watchUrl: item.watchUrl,
+            }}
+          />
+          <BestButton
+            item={{
+              id: `${item.mediaType}-${item.id}`,
+              title: item.title,
+              posterUrl: item.posterUrl,
+              year: item.year,
+              ott: item.ott,
+              watchUrl: item.watchUrl,
+            }}
+          />
         </div>
         <div className="flex min-w-0 flex-col gap-1.5">
           <p className="line-clamp-2 text-sm font-semibold text-foreground">{item.title}</p>

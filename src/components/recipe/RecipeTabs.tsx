@@ -1,12 +1,75 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import Image from "next/image";
+import FavoriteButton from "@/components/common/FavoriteButton";
+import BestButton from "@/components/common/BestButton";
+import { getCollection, type CollectionKey, type FavoriteItem } from "@/lib/favorites";
 
 const SUB_TABS = [
-  { key: "best", emoji: "🏆", label: "인생작", empty: "좋아요를 누른 콘텐츠가 이곳에 모여요." },
-  { key: "watchlist", emoji: "⭐", label: "볼거에요", empty: "나중에 보고 싶은 콘텐츠를 찜해보세요." },
+  { key: "best", emoji: "🏆", label: "인생작", empty: "🏆 버튼을 누른 콘텐츠가 이곳에 모여요." },
+  { key: "watchlist", emoji: "⭐", label: "볼거에요", empty: "⭐ 버튼을 누른 콘텐츠가 이곳에 모여요." },
   { key: "watched", emoji: "👀", label: "봤어요", empty: "외부 OTT로 이동해서 본 콘텐츠 기록이 쌓여요." },
 ] as const;
+
+function EmptyState({ emoji, message }: { emoji: string; message: string }) {
+  return (
+    <div className="flex min-h-[50dvh] flex-col items-center justify-center gap-3 px-8 text-center">
+      <span className="text-4xl">{emoji}</span>
+      <p className="text-sm leading-relaxed text-muted">{message}</p>
+    </div>
+  );
+}
+
+/** 홈/꿀맛 랭킹/검색/맞춤 코스 등 서비스 전체에서 ⭐/🏆로 표시한 콘텐츠를 포스터로 모아 보여준다. */
+function CollectionGrid({ listKey, emptyEmoji, emptyMessage }: { listKey: CollectionKey; emptyEmoji: string; emptyMessage: string }) {
+  const [items, setItems] = useState<FavoriteItem[] | null>(null);
+
+  useEffect(() => {
+    // Must default to null (nothing rendered) during SSR (no `localStorage`)
+    // and only pick up the real value once mounted in the browser, or
+    // hydration would mismatch against the server-rendered markup.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setItems(getCollection(listKey));
+  }, [listKey]);
+
+  if (items === null) return null;
+
+  if (items.length === 0) {
+    return <EmptyState emoji={emptyEmoji} message={emptyMessage} />;
+  }
+
+  return (
+    <div className="grid grid-cols-3 gap-4 px-6 pt-4 pb-8">
+      {items.map((item) => (
+        <div key={item.id} className="flex flex-col gap-1.5">
+          <div className="relative aspect-[2/3] w-full overflow-hidden rounded-xl border border-border bg-surface">
+            {item.posterUrl ? (
+              <Image src={item.posterUrl} alt={item.title} fill sizes="120px" className="object-cover" />
+            ) : (
+              <div className="flex h-full items-center justify-center text-2xl">🎬</div>
+            )}
+            <FavoriteButton
+              item={item}
+              onToggle={(active) => {
+                if (listKey !== "watchlist" || active) return;
+                setItems((prev) => prev?.filter((f) => f.id !== item.id) ?? prev);
+              }}
+            />
+            <BestButton
+              item={item}
+              onToggle={(active) => {
+                if (listKey !== "best" || active) return;
+                setItems((prev) => prev?.filter((f) => f.id !== item.id) ?? prev);
+              }}
+            />
+          </div>
+          <p className="line-clamp-2 text-xs font-medium text-foreground">{item.title}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 export default function RecipeTabs() {
   const [active, setActive] = useState<(typeof SUB_TABS)[number]["key"]>("best");
@@ -34,10 +97,11 @@ export default function RecipeTabs() {
         })}
       </div>
 
-      <div className="flex min-h-[50dvh] flex-col items-center justify-center gap-3 px-8 text-center">
-        <span className="text-4xl">{current.emoji}</span>
-        <p className="text-sm leading-relaxed text-muted">{current.empty}</p>
-      </div>
+      {active === "best" || active === "watchlist" ? (
+        <CollectionGrid listKey={active} emptyEmoji={current.emoji} emptyMessage={current.empty} />
+      ) : (
+        <EmptyState emoji={current.emoji} message={current.empty} />
+      )}
     </div>
   );
 }
