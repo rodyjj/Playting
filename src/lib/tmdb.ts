@@ -78,6 +78,74 @@ export async function searchPoster({
   return `${TMDB_IMAGE_BASE}${result.poster_path}`;
 }
 
+export type PosterAndWatch = {
+  posterUrl: string | null;
+  ottName: string | null;
+  watchUrl: string | null;
+};
+
+/**
+ * Same title-resolution cascade as searchPoster, but also verifies real KR
+ * streaming availability via TMDB watch/providers and resolves a click-through
+ * link (see resolveWatchInfo below) — used for the AI course list, whose
+ * `ott` field is only Gemini's guess and never had a link at all.
+ */
+export async function resolvePosterAndWatch({
+  title,
+  mediaType,
+  year,
+}: {
+  title: string;
+  mediaType?: PosterMediaType;
+  year?: number;
+}): Promise<PosterAndWatch> {
+  const type = mediaType === "movie" ? "movie" : "tv";
+  const yearKey = type === "movie" ? "year" : "first_air_date_year";
+
+  let result: TmdbMultiSearchResult | undefined;
+  let resolvedType: "movie" | "tv" = type;
+
+  if (year) {
+    const data = await tmdbGet(`/search/${type}`, { query: title, [yearKey]: String(year) });
+    result = data?.results?.[0];
+  }
+
+  if (!result) {
+    const data = await tmdbGet(`/search/${type}`, { query: title });
+    result = data?.results?.[0];
+  }
+
+  if (!result) {
+    const data = await tmdbGet("/search/multi", { query: title });
+    result = data?.results?.find(
+      (r: TmdbMultiSearchResult) => r.media_type === "movie" || r.media_type === "tv"
+    );
+    if (result?.media_type === "movie" || result?.media_type === "tv") resolvedType = result.media_type;
+  }
+
+  if (!result) {
+    // Season/cour suffixes often aren't part of the base show's TMDB title — same retry as searchPoster.
+    const stripped = title.replace(/\s*(시즌\s*\d+|파트\s*\d+|\d+\s*기)\s*$/u, "").trim();
+    if (stripped && stripped !== title) {
+      const data = await tmdbGet("/search/multi", { query: stripped });
+      result = data?.results?.find(
+        (r: TmdbMultiSearchResult) => r.media_type === "movie" || r.media_type === "tv"
+      );
+      if (result?.media_type === "movie" || result?.media_type === "tv") resolvedType = result.media_type;
+    }
+  }
+
+  if (!result) return { posterUrl: null, ottName: null, watchUrl: null };
+
+  const posterUrl = result.poster_path ? `${TMDB_IMAGE_BASE}${result.poster_path}` : null;
+  if (!result.id) return { posterUrl, ottName: null, watchUrl: null };
+
+  const providers = (await tmdbGet(`/${resolvedType}/${result.id}/watch/providers`, {})) as TmdbWatchProvidersResponse | null;
+  const { ottName, watchUrl } = resolveWatchInfo(providers, title);
+
+  return { posterUrl, ottName, watchUrl };
+}
+
 export type TitleSuggestion = {
   id: number;
   title: string;

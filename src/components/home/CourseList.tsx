@@ -7,6 +7,7 @@ import { OTT_PROVIDERS } from "@/data/ott-providers";
 import { RefreshIcon } from "@/components/nav/icons";
 import FavoriteButton from "@/components/common/FavoriteButton";
 import BestButton from "@/components/common/BestButton";
+import { markWatched } from "@/lib/favorites";
 
 type CourseItem = {
   title: string;
@@ -14,6 +15,7 @@ type CourseItem = {
   year: number;
   mediaType: "movie" | "tv" | "anime";
   posterUrl: string;
+  watchUrl: string;
 };
 
 type Course = {
@@ -126,7 +128,12 @@ function CourseRow({
       onPointerUp={endDrag}
       onPointerLeave={endDrag}
       onClickCapture={(event) => {
-        if (dragState.current?.moved) event.stopPropagation();
+        if (dragState.current?.moved) {
+          // Items are real links now (not plain divs) — preventDefault, not
+          // just stopPropagation, or a drag-release could still navigate.
+          event.preventDefault();
+          event.stopPropagation();
+        }
       }}
       className={`mt-3 flex gap-3 overflow-x-auto px-6 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${
         dragging ? "cursor-grabbing select-none" : "cursor-grab"
@@ -139,9 +146,20 @@ function CourseRow({
           posterUrl: item.posterUrl,
           year: item.year,
           ott: item.ott,
+          watchUrl: item.watchUrl,
         };
         return (
-        <div key={item.title} className="w-32 shrink-0">
+        <a
+          key={item.title}
+          href={item.watchUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label={`${item.title} — ${item.ott}에서 보기`}
+          draggable={false}
+          onDragStart={(e) => e.preventDefault()}
+          onClick={() => markWatched(favoriteItem)}
+          className="w-32 shrink-0"
+        >
           <div className="relative aspect-[2/3] w-full overflow-hidden rounded-2xl border border-border bg-surface">
             <Image
               src={item.posterUrl}
@@ -175,7 +193,7 @@ function CourseRow({
             </div>
           </div>
           <p className="mt-1.5 line-clamp-1 text-xs font-medium text-foreground">{item.title}</p>
-        </div>
+        </a>
         );
       })}
     </div>

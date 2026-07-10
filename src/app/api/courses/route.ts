@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { generateCourses, isGeminiConfigured } from "@/lib/gemini";
-import { searchPoster } from "@/lib/tmdb";
+import { resolvePosterAndWatch } from "@/lib/tmdb";
 
 export async function POST(request: Request) {
   if (!isGeminiConfigured()) {
@@ -32,12 +32,20 @@ export async function POST(request: Request) {
   const resolved = await Promise.all(
     courses.map(async (course) => {
       const items = await Promise.all(
-        course.items.map(async (item) => ({
-          ...item,
-          posterUrl: await searchPoster({ title: item.title, mediaType: item.mediaType, year: item.year }),
-        }))
+        course.items.map(async (item) => {
+          const { posterUrl, ottName, watchUrl } = await resolvePosterAndWatch({
+            title: item.title,
+            mediaType: item.mediaType,
+            year: item.year,
+          });
+          // ottName is TMDB-verified where Gemini's own `ott` guess isn't —
+          // prefer it, but keep the guess if TMDB couldn't confirm a provider.
+          return { ...item, posterUrl, ott: ottName ?? item.ott, watchUrl };
+        })
       );
-      return { ...course, items: items.filter((item) => item.posterUrl) };
+      // A poster with no resolvable watch link is a dead click — same
+      // filtering rule as search results' related titles.
+      return { ...course, items: items.filter((item) => item.posterUrl && item.watchUrl) };
     })
   );
 
