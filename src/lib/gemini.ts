@@ -69,8 +69,41 @@ const COURSE_SCHEMA = {
   additionalProperties: false,
 } as const;
 
+function hasVertexConfig(): boolean {
+  return Boolean(process.env.GOOGLE_VERTEX_PROJECT && process.env.GOOGLE_VERTEX_CREDENTIALS);
+}
+
 export function isGeminiConfigured(): boolean {
-  return Boolean(process.env.GEMINI_API_KEY);
+  return hasVertexConfig() || Boolean(process.env.GEMINI_API_KEY);
+}
+
+/**
+ * Vertex AI billing runs through the project's normal Cloud Billing account
+ * (so it draws on any standing Cloud credit), unlike an AI Studio API key,
+ * which is metered against a separate free-tier request quota — that's the
+ * whole reason this project prefers Vertex when it's configured. Falls back
+ * to the plain API key (AI Studio) when the Vertex service-account env vars
+ * aren't set, so a fresh `git clone` with just `GEMINI_API_KEY` still works.
+ */
+function createGeminiClient(): GoogleGenAI | null {
+  const project = process.env.GOOGLE_VERTEX_PROJECT;
+  const credentialsRaw = process.env.GOOGLE_VERTEX_CREDENTIALS;
+  if (project && credentialsRaw) {
+    try {
+      const credentials = JSON.parse(credentialsRaw);
+      return new GoogleGenAI({
+        vertexai: true,
+        project,
+        location: process.env.GOOGLE_VERTEX_LOCATION || "us-central1",
+        googleAuthOptions: { credentials },
+      });
+    } catch {
+      // Falls through to the API-key path below if the credentials JSON is malformed.
+    }
+  }
+
+  const apiKey = process.env.GEMINI_API_KEY;
+  return apiKey ? new GoogleGenAI({ apiKey }) : null;
 }
 
 /**
@@ -150,10 +183,8 @@ export async function generateCourses({
   people: string[];
   subscribedOtt: string[];
 }): Promise<Course[]> {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) return [];
-
-  const ai = new GoogleGenAI({ apiKey });
+  const ai = createGeminiClient();
+  if (!ai) return [];
 
   const subscribedOttNames = new Set(
     subscribedOtt
@@ -192,6 +223,14 @@ ${preferenceLines}
     config: {
       responseMimeType: "application/json",
       responseJsonSchema: COURSE_SCHEMA,
+      // This is a recall/composition task (pick real titles, group them by
+      // theme) with an already-tightly-specified prompt + schema — not the
+      // kind of multi-step logic "thinking" helps with. A direct probe of
+      // this model showed it spends hundreds of thinking tokens even on a
+      // one-word prompt by default, all invisible latency; skipping that
+      // step is the single biggest lever available for cutting generation
+      // time without touching the actual output content.
+      thinkingConfig: { thinkingBudget: 0 },
     },
   });
 
@@ -253,10 +292,8 @@ export async function analyzeDessertStrategy({
 }): Promise<DessertStrategy> {
   const fallback: DessertStrategy = { category: "general", searchQuery: `${title} 비하인드` };
 
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) return fallback;
-
-  const ai = new GoogleGenAI({ apiKey });
+  const ai = createGeminiClient();
+  if (!ai) return fallback;
 
   const prompt = `당신은 OTT 콘텐츠 큐레이터입니다. 아래 작품을 시청한 사용자가 더 깊이 몰입할 수 있도록, 유튜브에서 찾아볼 보조 영상의 방향을 정해주세요.
 
@@ -348,10 +385,8 @@ export async function selectTimeCourseTitles({
   pool: TimeCourseCandidate[];
   genres: string[];
 }): Promise<TimeCourseCandidate[]> {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) return [];
-
-  const ai = new GoogleGenAI({ apiKey });
+  const ai = createGeminiClient();
+  if (!ai) return [];
 
   const poolLines = pool.map((p) => `- ${p.title}${p.year ? ` (${p.year})` : ""} [${p.mediaType}]`).join("\n");
   const genreLine = genres.length > 0 ? `\n사용자가 좋아하는 장르: ${genres.map((g) => `#${g}`).join(", ")}` : "";

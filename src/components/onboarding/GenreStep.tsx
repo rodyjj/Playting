@@ -66,7 +66,7 @@ export default function GenreStep({
                 }
               }}
               placeholder="찾는 장르가 없다면 직접 입력해보세요"
-              className="min-w-0 flex-1 rounded-2xl border border-border bg-surface px-4 py-3 text-sm text-foreground placeholder:text-muted focus:border-accent-light focus:outline-none"
+              className="min-w-0 flex-1 rounded-2xl border border-border bg-surface-elevated px-4 py-3 text-sm text-foreground placeholder:text-muted focus:border-accent-light focus:outline-none"
             />
             <button
               type="button"

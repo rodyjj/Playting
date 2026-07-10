@@ -17,7 +17,8 @@ export async function POST(request: Request) {
   }
 
   let failed = false;
-  const courses = await generateCourses({ genres, people, subscribedOtt }).catch(() => {
+  const courses = await generateCourses({ genres, people, subscribedOtt }).catch((err) => {
+    console.error("generateCourses failed:", err);
     failed = true;
     return [];
   });

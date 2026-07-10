@@ -225,6 +225,10 @@ export default function CourseList() {
   if (courses === null) {
     return (
       <div className="flex flex-col gap-3 px-6 pt-8">
+        <div className="mx-auto flex items-center gap-2 rounded-full border border-accent-light/40 bg-accent-soft px-4 py-2">
+          <span className="h-2 w-2 animate-pulse rounded-full bg-accent-light" />
+          <p className="text-xs font-semibold text-accent-light">AI를 사용하여 추천 코스를 생성중이에요!</p>
+        </div>
         <div className="h-5 w-40 animate-pulse rounded-full bg-surface" />
         <div className="flex gap-3">
           <div className="h-48 w-32 shrink-0 animate-pulse rounded-2xl bg-surface" />

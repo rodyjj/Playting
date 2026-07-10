@@ -591,3 +591,234 @@ export async function getBalancedHomeCarousel(limit = 16): Promise<HomeCarouselT
 
   return picked.slice(0, limit);
 }
+
+// ---- Search results page: main title + tiered "related" recommendations ----
+
+export type SearchMainTitle = TitleSuggestion & {
+  director: string | null;
+  cast: string[];
+  ottName: string | null;
+  watchUrl: string | null;
+};
+
+export type RelatedTitle = TitleSuggestion & { ott: string; watchUrl: string };
+
+export type RelatedGroup = {
+  label: string;
+  items: RelatedTitle[];
+};
+
+export type SearchPageData = {
+  main: SearchMainTitle;
+  groups: RelatedGroup[];
+};
+
+type TmdbCrewMember = { id?: number; name?: string; job?: string };
+type TmdbMovieDetails = {
+  id: number;
+  title?: string;
+  release_date?: string;
+  poster_path?: string | null;
+  belongs_to_collection?: { id: number } | null;
+  credits?: { cast?: Array<{ name?: string }>; crew?: TmdbCrewMember[] };
+};
+type TmdbCollectionResponse = {
+  parts?: Array<{ id: number; title?: string; release_date?: string; poster_path?: string | null }>;
+};
+type TmdbPersonMovieCredits = {
+  crew?: Array<{ id: number; title?: string; release_date?: string; poster_path?: string | null; job?: string }>;
+};
+type TmdbTvDetails = {
+  id: number;
+  name?: string;
+  first_air_date?: string;
+  poster_path?: string | null;
+  created_by?: Array<{ id: number; name?: string }>;
+};
+type TmdbPersonTvCredits = {
+  crew?: Array<{ id: number; name?: string; first_air_date?: string; poster_path?: string | null }>;
+};
+type TmdbRecommendationsResponse = {
+  results?: Array<{ id: number; title?: string; name?: string; release_date?: string; first_air_date?: string; poster_path?: string | null }>;
+};
+
+function toTitleSuggestion(
+  r: { id: number; title?: string; name?: string; release_date?: string; first_air_date?: string; poster_path?: string | null },
+  mediaType: "movie" | "tv"
+): TitleSuggestion | null {
+  const title = r.title ?? r.name ?? "";
+  if (!title || !r.poster_path) return null;
+  const dateStr = r.release_date ?? r.first_air_date;
+  return {
+    id: r.id,
+    title,
+    year: dateStr && dateStr.length >= 4 ? Number(dateStr.slice(0, 4)) : undefined,
+    mediaType,
+    posterUrl: `${TMDB_IMAGE_BASE}${r.poster_path}`,
+  };
+}
+
+/**
+ * Related-title posters need to be clickable straight through to wherever
+ * they actually stream (same as the main title's "시청하기"), not just to
+ * another internal search page — so each candidate gets its own
+ * watch/providers lookup, and anything with no resolvable KR provider is
+ * dropped rather than shown as a dead click.
+ */
+async function resolveOttForItems(items: TitleSuggestion[], mediaType: "movie" | "tv"): Promise<RelatedTitle[]> {
+  const resolved = await Promise.all(
+    items.map(async (item): Promise<RelatedTitle | null> => {
+      const providers = (await tmdbGet(`/${mediaType}/${item.id}/watch/providers`, {})) as TmdbWatchProvidersResponse | null;
+      const { ottName, watchUrl } = resolveWatchInfo(providers, item.title);
+      if (!ottName || !watchUrl) return null;
+      return { ...item, ott: ottName, watchUrl };
+    })
+  );
+  return resolved.filter((item): item is RelatedTitle => item !== null);
+}
+
+/**
+ * Search-results page data: the searched title up top, then "related" titles
+ * grouped into three priority tiers —
+ *   1. 시리즈 (same franchise: TMDB's `belongs_to_collection` for movies, a
+ *      stripped-title-stem search for TV/anime since TMDB has no collection
+ *      concept there)
+ *   2. 감독/제작자의 다른 작품 (same director for movies, same creator for TV) —
+ *      note TMDB has no "shared universe" tagging (e.g. MCU spans many
+ *      separate collections), so that specific criterion from the spec isn't
+ *      achievable without a hand-curated mapping; this tier covers the
+ *      same-director/creator half of that priority level
+ *   3. 비슷한 장르의 작품 — TMDB's own `/recommendations` endpoint
+ * Each tier excludes anything already shown in an earlier tier.
+ */
+export async function getSearchPageData({
+  id,
+  mediaType,
+  title,
+}: {
+  id: number;
+  mediaType: "movie" | "tv";
+  title: string;
+}): Promise<SearchPageData | null> {
+  const seen = new Set<number>([id]);
+  const groups: RelatedGroup[] = [];
+
+  if (mediaType === "movie") {
+    const details = (await tmdbGet(`/movie/${id}`, { append_to_response: "credits" })) as TmdbMovieDetails | null;
+    if (!details) return null;
+
+    const mainTitle = details.title ?? title;
+    const year = details.release_date && details.release_date.length >= 4 ? Number(details.release_date.slice(0, 4)) : undefined;
+    const posterUrl = details.poster_path ? `${TMDB_IMAGE_BASE}${details.poster_path}` : null;
+    const director = details.credits?.crew?.find((c) => c.job === "Director") ?? null;
+    const cast = (details.credits?.cast ?? [])
+      .slice(0, 3)
+      .map((c) => c.name)
+      .filter((n): n is string => Boolean(n));
+
+    const providers = (await tmdbGet(`/movie/${id}/watch/providers`, {})) as TmdbWatchProvidersResponse | null;
+    const { ottName, watchUrl } = resolveWatchInfo(providers, mainTitle);
+
+    // Tier 1: same collection (Harry Potter → the rest of the Harry Potter Collection)
+    if (details.belongs_to_collection?.id) {
+      const collection = (await tmdbGet(`/collection/${details.belongs_to_collection.id}`, {})) as TmdbCollectionResponse | null;
+      const parts = (collection?.parts ?? [])
+        .filter((p) => !seen.has(p.id))
+        .sort((a, b) => (a.release_date ?? "").localeCompare(b.release_date ?? ""))
+        .map((p) => toTitleSuggestion(p, "movie"))
+        .filter((p): p is TitleSuggestion => p !== null);
+      parts.forEach((p) => seen.add(p.id));
+      const resolvedParts = await resolveOttForItems(parts.slice(0, 10), "movie");
+      if (resolvedParts.length > 0) groups.push({ label: "시리즈", items: resolvedParts });
+    }
+
+    // Tier 2: same director's other films
+    if (director?.id) {
+      const personCredits = (await tmdbGet(`/person/${director.id}/movie_credits`, {})) as TmdbPersonMovieCredits | null;
+      const directed = (personCredits?.crew ?? [])
+        .filter((c) => c.job === "Director" && !seen.has(c.id))
+        .sort((a, b) => (b.release_date ?? "").localeCompare(a.release_date ?? ""))
+        .map((c) => toTitleSuggestion(c, "movie"))
+        .filter((c): c is TitleSuggestion => c !== null);
+      directed.forEach((c) => seen.add(c.id));
+      const resolvedDirected = await resolveOttForItems(directed.slice(0, 10), "movie");
+      if (resolvedDirected.length > 0) groups.push({ label: `${director.name ?? "같은"} 감독의 다른 작품`, items: resolvedDirected });
+    }
+
+    // Tier 3: TMDB's own similarity engine (genre/keyword/cast-based)
+    const recs = (await tmdbGet(`/movie/${id}/recommendations`, {})) as TmdbRecommendationsResponse | null;
+    const similar = (recs?.results ?? [])
+      .filter((r) => !seen.has(r.id))
+      .map((r) => toTitleSuggestion(r, "movie"))
+      .filter((r): r is TitleSuggestion => r !== null);
+    const resolvedSimilar = await resolveOttForItems(similar.slice(0, 10), "movie");
+    if (resolvedSimilar.length > 0) groups.push({ label: "비슷한 장르의 작품", items: resolvedSimilar });
+
+    return {
+      main: { id, title: mainTitle, year, mediaType: "movie", posterUrl, director: director?.name ?? null, cast, ottName, watchUrl },
+      groups,
+    };
+  }
+
+  // TV / anime
+  const details = (await tmdbGet(`/tv/${id}`, {})) as TmdbTvDetails | null;
+  if (!details) return null;
+
+  const mainTitle = details.name ?? title;
+  const year = details.first_air_date && details.first_air_date.length >= 4 ? Number(details.first_air_date.slice(0, 4)) : undefined;
+  const posterUrl = details.poster_path ? `${TMDB_IMAGE_BASE}${details.poster_path}` : null;
+
+  const [credits, providers] = await Promise.all([
+    tmdbGet(`/tv/${id}/credits`, {}) as Promise<TmdbCreditsResponse | null>,
+    tmdbGet(`/tv/${id}/watch/providers`, {}) as Promise<TmdbWatchProvidersResponse | null>,
+  ]);
+  const cast = (credits?.cast ?? [])
+    .slice(0, 3)
+    .map((c) => c.name)
+    .filter((n): n is string => Boolean(n));
+  const { ottName, watchUrl } = resolveWatchInfo(providers, mainTitle);
+  const creator = details.created_by?.[0] ?? null;
+
+  // Tier 1: TMDB has no "collection" concept for TV, so this is a best-effort
+  // stand-in — strip a season/cour suffix (같은 heuristic as searchPoster) and
+  // search for other shows sharing that title stem (e.g. split-cour anime).
+  const stem = mainTitle.replace(/\s*(시즌\s*\d+|파트\s*\d+|\d+\s*기)\s*$/u, "").trim();
+  if (stem) {
+    const stemSearch = await tmdbGet("/search/tv", { query: stem });
+    const stemLower = stem.toLowerCase();
+    const series = ((stemSearch?.results ?? []) as TmdbMultiSearchResult[])
+      .filter((r) => !seen.has(r.id) && (r.name ?? "").toLowerCase().startsWith(stemLower))
+      .map((r) => toTitleSuggestion({ id: r.id, name: r.name, first_air_date: r.first_air_date, poster_path: r.poster_path }, "tv"))
+      .filter((r): r is TitleSuggestion => r !== null);
+    series.forEach((s) => seen.add(s.id));
+    const resolvedSeries = await resolveOttForItems(series.slice(0, 10), "tv");
+    if (resolvedSeries.length > 0) groups.push({ label: "시리즈", items: resolvedSeries });
+  }
+
+  // Tier 2: same creator's other shows
+  if (creator?.id) {
+    const personCredits = (await tmdbGet(`/person/${creator.id}/tv_credits`, {})) as TmdbPersonTvCredits | null;
+    const created = (personCredits?.crew ?? [])
+      .filter((c) => !seen.has(c.id))
+      .sort((a, b) => (b.first_air_date ?? "").localeCompare(a.first_air_date ?? ""))
+      .map((c) => toTitleSuggestion(c, "tv"))
+      .filter((c): c is TitleSuggestion => c !== null);
+    created.forEach((c) => seen.add(c.id));
+    const resolvedCreated = await resolveOttForItems(created.slice(0, 10), "tv");
+    if (resolvedCreated.length > 0) groups.push({ label: `${creator.name ?? "같은"} 제작자의 다른 작품`, items: resolvedCreated });
+  }
+
+  // Tier 3: TMDB's own similarity engine
+  const recs = (await tmdbGet(`/tv/${id}/recommendations`, {})) as TmdbRecommendationsResponse | null;
+  const similar = (recs?.results ?? [])
+    .filter((r) => !seen.has(r.id))
+    .map((r) => toTitleSuggestion(r, "tv"))
+    .filter((r): r is TitleSuggestion => r !== null);
+  const resolvedSimilar = await resolveOttForItems(similar.slice(0, 10), "tv");
+  if (resolvedSimilar.length > 0) groups.push({ label: "비슷한 장르의 작품", items: resolvedSimilar });
+
+  return {
+    main: { id, title: mainTitle, year, mediaType: "tv", posterUrl, director: creator?.name ?? null, cast, ottName, watchUrl },
+    groups,
+  };
+}

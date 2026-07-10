@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import Image from "next/image";
 import type { TitleSuggestion } from "@/lib/tmdb";
 
 export default function SearchBar() {
+  const router = useRouter();
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<TitleSuggestion | null>(null);
   const [suggestions, setSuggestions] = useState<TitleSuggestion[]>([]);
@@ -69,6 +71,27 @@ export default function SearchBar() {
     setHoveredSuggestion(null);
   };
 
+  // Enter or the search icon both "commit" the search: prefer whatever was
+  // explicitly clicked in the dropdown, fall back to the top suggestion
+  // already fetched, and as a last resort (e.g. Enter pressed before the
+  // debounced fetch landed) resolve the query on demand.
+  const goToSearchPage = async () => {
+    let target: TitleSuggestion | null = selected ?? suggestions[0] ?? null;
+    if (!target) {
+      const trimmed = query.trim();
+      if (!trimmed) return;
+      try {
+        const res = await fetch(`/api/titles?q=${encodeURIComponent(trimmed)}`);
+        const json = await res.json();
+        target = json.results?.[0] ?? null;
+      } catch {
+        target = null;
+      }
+    }
+    if (!target) return;
+    router.push(`/search?id=${target.id}&mediaType=${target.mediaType}&title=${encodeURIComponent(target.title)}`);
+  };
+
   return (
     <div className="px-6 pt-5">
       <div ref={searchWrapperRef} className="relative">
@@ -81,13 +104,21 @@ export default function SearchBar() {
               if (selected) setSelected(null);
             }}
             onFocus={() => suggestions.length > 0 && setShowDropdown(true)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                goToSearchPage();
+              }
+            }}
             placeholder="작품, 배우, 감독을 검색해보세요"
             className="w-full bg-transparent text-sm text-foreground placeholder:text-muted focus:outline-none"
           />
-          <svg viewBox="0 0 24 24" className="h-5 w-5 shrink-0 text-muted" fill="none" stroke="currentColor" strokeWidth="2">
-            <circle cx="11" cy="11" r="7" />
-            <path d="M21 21l-4.35-4.35" strokeLinecap="round" />
-          </svg>
+          <button type="button" onClick={goToSearchPage} aria-label="검색" className="shrink-0 text-muted">
+            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="11" cy="11" r="7" />
+              <path d="M21 21l-4.35-4.35" strokeLinecap="round" />
+            </svg>
+          </button>
         </div>
 
         {showDropdown && suggestions.length > 0 && (
