@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Image from "next/image";
 import FavoriteButton from "@/components/common/FavoriteButton";
 import BestButton from "@/components/common/BestButton";
-import { getCollection, removeFromCollection, type CollectionKey, type FavoriteItem } from "@/lib/favorites";
+import { getCollection, markWatched, removeFromCollection, type CollectionKey, type FavoriteItem } from "@/lib/favorites";
 
 const SUB_TABS = [
   { key: "best", emoji: "🏆", label: "인생작", empty: "🏆 버튼을 누른 콘텐츠가 이곳에 모여요." },
@@ -53,8 +53,8 @@ function CollectionGrid({
 
   return (
     <div className="grid grid-cols-3 gap-4 px-6 pt-4 pb-8">
-      {items.map((item) => (
-        <div key={item.id} className="flex flex-col gap-1.5">
+      {items.map((item) => {
+        const poster = (
           <div className="relative aspect-[2/3] w-full overflow-hidden rounded-xl border border-border bg-surface">
             {item.posterUrl ? (
               <Image src={item.posterUrl} alt={item.title} fill sizes="120px" className="object-cover" />
@@ -64,7 +64,11 @@ function CollectionGrid({
             {listKey === "watched" ? (
               <button
                 type="button"
-                onClick={() => {
+                onClick={(event) => {
+                  // The poster is wrapped in a link below when it has a
+                  // watchUrl — without this, "제거" would also follow it.
+                  event.preventDefault();
+                  event.stopPropagation();
                   removeFromCollection("watched", item.id);
                   setItems((prev) => prev?.filter((f) => f.id !== item.id) ?? prev);
                 }}
@@ -92,9 +96,27 @@ function CollectionGrid({
               </>
             )}
           </div>
-          <p className="line-clamp-2 text-xs font-medium text-foreground">{item.title}</p>
-        </div>
-      ))}
+        );
+
+        return (
+          <div key={item.id} className="flex flex-col gap-1.5">
+            {item.watchUrl ? (
+              <a
+                href={item.watchUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label={`${item.title} — ${item.ott ?? "시청 플랫폼"}에서 보기`}
+                onClick={() => markWatched(item)}
+              >
+                {poster}
+              </a>
+            ) : (
+              poster
+            )}
+            <p className="line-clamp-2 text-xs font-medium text-foreground">{item.title}</p>
+          </div>
+        );
+      })}
     </div>
   );
 }
