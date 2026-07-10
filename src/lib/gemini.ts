@@ -128,19 +128,25 @@ async function generateContentWithRetry(
   throw new Error("unreachable");
 }
 
+// Emoji sequence: a pictograph, optionally ZWJ-joined to more pictographs, with an optional variation selector.
+const EMOJI_SEQUENCE = /\p{Extended_Pictographic}(‍\p{Extended_Pictographic})*️?/gu;
+
+const DEFAULT_COURSE_EMOJI = "🎬";
+
 /**
- * Keeps only the first grapheme cluster so multi-codepoint emoji (flags, ZWJ
- * sequences, skin-tone modifiers) survive intact — the model doesn't always
- * follow the "exactly one emoji" instruction, so this enforces it regardless.
+ * Keeps only the first grapheme cluster that's actually a pictograph (flags,
+ * ZWJ sequences, skin-tone modifiers survive intact) — the model doesn't
+ * always follow the "exactly one emoji" instruction and sometimes returns a
+ * blank/whitespace value instead, so this falls back to a default rather
+ * than trusting whatever grapheme happens to come first.
  */
 function firstEmoji(value: string): string {
   const segmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });
-  const first = segmenter.segment(value)[Symbol.iterator]().next();
-  return first.done ? value : first.value.segment;
+  for (const { segment } of segmenter.segment(value)) {
+    if (/\p{Extended_Pictographic}/u.test(segment)) return segment;
+  }
+  return DEFAULT_COURSE_EMOJI;
 }
-
-// Emoji sequence: a pictograph, optionally ZWJ-joined to more pictographs, with an optional variation selector.
-const EMOJI_SEQUENCE = /\p{Extended_Pictographic}(‍\p{Extended_Pictographic})*️?/gu;
 
 /**
  * Belt-and-suspenders for course titles: the emoji is already rendered from

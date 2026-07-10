@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { fetchOnboardingData } from "@/lib/onboarding";
 import { OTT_PROVIDERS } from "@/data/ott-providers";
+import { RefreshIcon } from "@/components/nav/icons";
+import FavoriteButton from "@/components/common/FavoriteButton";
 
 type CourseItem = {
   title: string;
@@ -68,16 +70,22 @@ function CourseRow({
   subscribedOttNames?: Set<string>;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
-  const dragState = useRef<{ startX: number; startScrollLeft: number; moved: boolean } | null>(null);
+  const dragState = useRef<{ startX: number; startScrollLeft: number; moved: boolean; captured: boolean } | null>(
+    null
+  );
   const [dragging, setDragging] = useState(false);
 
   const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     if (event.pointerType !== "mouse") return;
     const el = scrollRef.current;
     if (!el) return;
-    dragState.current = { startX: event.clientX, startScrollLeft: el.scrollLeft, moved: false };
+    dragState.current = { startX: event.clientX, startScrollLeft: el.scrollLeft, moved: false, captured: false };
     setDragging(true);
-    el.setPointerCapture(event.pointerId);
+    // Pointer capture is deliberately NOT taken here on plain pointerdown —
+    // capturing on the container immediately breaks the browser's own click
+    // synthesis for a child <button> underneath the pointer (e.g. the
+    // favorite star), so a plain tap/click stopped registering. It's only
+    // engaged once a real drag is confirmed in handlePointerMove.
   };
 
   const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
@@ -85,6 +93,12 @@ function CourseRow({
     const state = dragState.current;
     if (!el || !state) return;
     const delta = event.clientX - state.startX;
+    if (!state.captured && Math.abs(delta) > 3) {
+      state.captured = true;
+      try {
+        el.setPointerCapture(event.pointerId);
+      } catch {}
+    }
     if (Math.abs(delta) > 3) state.moved = true;
     el.scrollLeft = state.startScrollLeft - delta;
   };
@@ -96,7 +110,7 @@ function CourseRow({
         // Prevent the trailing click from firing after a real drag.
         event.preventDefault();
       }
-      el.releasePointerCapture(event.pointerId);
+      if (dragState.current.captured) el.releasePointerCapture(event.pointerId);
     }
     dragState.current = null;
     setDragging(false);
@@ -127,12 +141,18 @@ function CourseRow({
               className="pointer-events-none object-cover select-none"
               draggable={false}
             />
+            <FavoriteButton id={`${item.title}-${item.year}`} />
             {!subscribedOttNames.has(item.ott) && (
-              <div className="absolute inset-x-0 top-0 bg-black/60 px-1.5 py-1 backdrop-blur-[1px]">
-                <p className="text-center text-[8px] font-semibold leading-tight text-white/95">
-                  미구독 플랫폼 컨텐츠입니다.
-                </p>
-              </div>
+              <>
+                <div className="pointer-events-none absolute inset-0 bg-black/30" />
+                <div className="absolute left-1 right-7 top-1.5">
+                  <p className="text-center text-[11px] font-semibold leading-tight text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.85)]">
+                    미구독 플랫폼
+                    <br />
+                    서비스입니다.
+                  </p>
+                </div>
+              </>
             )}
             <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent px-2 pb-2 pt-6">
               <span
@@ -248,6 +268,12 @@ export default function CourseList() {
     );
   }
 
+  const handleRefresh = () => {
+    forceRefreshRef.current = true;
+    setCourses(null);
+    setRetryToken((t) => t + 1);
+  };
+
   if (courses.length === 0) {
     if (!failed) return null;
     return (
@@ -257,11 +283,7 @@ export default function CourseList() {
         </p>
         <button
           type="button"
-          onClick={() => {
-            forceRefreshRef.current = true;
-            setCourses(null);
-            setRetryToken((t) => t + 1);
-          }}
+          onClick={handleRefresh}
           className="rounded-full border border-accent-light px-4 py-1.5 text-xs font-semibold text-accent-light transition-colors hover:bg-accent-soft"
         >
           다시 시도
@@ -271,7 +293,19 @@ export default function CourseList() {
   }
 
   return (
-    <div className="flex flex-col gap-8 pt-8">
+    <div className="pt-8">
+      <div className="mt-1 flex items-center justify-end gap-2 px-6 pb-4">
+        <span className="text-[11px] font-medium text-muted">AI 코스 새로고침</span>
+        <button
+          type="button"
+          onClick={handleRefresh}
+          aria-label="코스 새로고침"
+          className="flex h-8 w-8 items-center justify-center rounded-full border border-border bg-surface text-muted transition-colors hover:text-accent-light active:scale-95"
+        >
+          <RefreshIcon className="h-4 w-4" />
+        </button>
+      </div>
+      <div className="flex flex-col gap-8">
       {courses.map((course) => (
         <section key={course.title}>
           <div className="flex items-baseline gap-2 px-6">
@@ -283,6 +317,7 @@ export default function CourseList() {
           <CourseRow items={course.items} subscribedOttNames={subscribedOttNames} />
         </section>
       ))}
+      </div>
     </div>
   );
 }

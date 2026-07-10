@@ -33,7 +33,7 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col items-center text-foreground">
-        <div className="relative min-h-dvh w-full max-w-[430px] bg-background sm:border-x sm:border-border sm:shadow-[0_0_80px_-20px_rgba(0,0,0,0.9)]">
+        <div className="relative min-h-dvh w-full max-w-[430px] overflow-x-hidden bg-background sm:border-x sm:border-border sm:shadow-[0_0_80px_-20px_rgba(0,0,0,0.9)]">
           {children}
           <BottomNav />
         </div>

@@ -1,7 +1,21 @@
 const YOUTUBE_BASE = "https://www.googleapis.com/youtube/v3";
 
+// YOUTUBE_API_KEY may hold one key or a comma-separated list of several — one
+// per Google Cloud project. search.list has its own tiny separate quota
+// (100 calls/day/project by default), easy to exhaust with real booth
+// traffic; spreading calls across several projects' keys multiplies that
+// ceiling without needing per-key code changes.
+function getApiKeys(): string[] {
+  const raw = process.env.YOUTUBE_API_KEY;
+  if (!raw) return [];
+  return raw
+    .split(",")
+    .map((key) => key.trim())
+    .filter(Boolean);
+}
+
 export function isYoutubeConfigured(): boolean {
-  return Boolean(process.env.YOUTUBE_API_KEY);
+  return getApiKeys().length > 0;
 }
 
 export type YoutubeVideo = {
@@ -33,12 +47,38 @@ function decodeHtmlEntities(value: string): string {
   return value.replace(/&(amp|#39|quot|lt|gt);/g, (match) => HTML_ENTITIES[match] ?? match);
 }
 
-async function searchYoutube(query: string, max: number): Promise<YoutubeVideo[]> {
-  const apiKey = process.env.YOUTUBE_API_KEY;
-  if (!apiKey) return [];
+// Remembers which key last worked so a call doesn't re-try already-exhausted
+// keys from the front of the list every single time — advances forward
+// (never back to an earlier key) as each one runs out of quota over the day.
+let activeKeyIndex = 0;
 
-  const qs = new URLSearchParams({
-    key: apiKey,
+/**
+ * Tries each configured key in turn, starting from the last known-good one,
+ * and returns the first successful response. A quota-exceeded (or any other
+ * failed) response just falls through to the next key rather than giving up —
+ * Google rejects over-quota requests before they consume anything, so this
+ * costs nothing extra beyond the failed round-trip itself.
+ */
+async function youtubeFetch(path: string, params: Record<string, string>): Promise<Response | null> {
+  const keys = getApiKeys();
+  if (keys.length === 0) return null;
+
+  for (let attempt = 0; attempt < keys.length; attempt++) {
+    const index = (activeKeyIndex + attempt) % keys.length;
+    const qs = new URLSearchParams({ ...params, key: keys[index] });
+    const res = await fetch(`${YOUTUBE_BASE}${path}?${qs.toString()}`, {
+      next: { revalidate: 60 * 60 * 24 },
+    });
+    if (res.ok) {
+      activeKeyIndex = index;
+      return res;
+    }
+  }
+  return null;
+}
+
+async function searchYoutube(query: string, max: number): Promise<YoutubeVideo[]> {
+  const res = await youtubeFetch("/search", {
     part: "snippet",
     type: "video",
     maxResults: String(max),
@@ -46,11 +86,7 @@ async function searchYoutube(query: string, max: number): Promise<YoutubeVideo[]
     safeSearch: "none",
     q: query,
   });
-
-  const res = await fetch(`${YOUTUBE_BASE}/search?${qs.toString()}`, {
-    next: { revalidate: 60 * 60 * 24 },
-  });
-  if (!res.ok) return [];
+  if (!res) return [];
 
   const data = (await res.json()) as { items?: YoutubeSearchItem[] };
   return (data.items ?? [])
@@ -91,8 +127,7 @@ export async function searchVideoByDuration(
   range: { min: number; max?: number },
   options?: { max?: number; isRelevant?: (video: YoutubeVideo) => boolean }
 ): Promise<TimedYoutubeVideo | null> {
-  const apiKey = process.env.YOUTUBE_API_KEY;
-  if (!apiKey) return null;
+  if (!isYoutubeConfigured()) return null;
 
   const max = options?.max ?? 8;
   const isRelevant = options?.isRelevant;
@@ -100,15 +135,11 @@ export async function searchVideoByDuration(
   const candidates = await searchYoutube(query, max);
   if (candidates.length === 0) return null;
 
-  const qs = new URLSearchParams({
-    key: apiKey,
+  const res = await youtubeFetch("/videos", {
     part: "contentDetails",
     id: candidates.map((c) => c.videoId).join(","),
   });
-  const res = await fetch(`${YOUTUBE_BASE}/videos?${qs.toString()}`, {
-    next: { revalidate: 60 * 60 * 24 },
-  });
-  if (!res.ok) return null;
+  if (!res) return null;
 
   const data = (await res.json()) as { items?: { id?: string; contentDetails?: { duration?: string } }[] };
   const durations = new Map(

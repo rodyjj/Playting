@@ -21,6 +21,11 @@ type SavedCourse = {
 };
 
 const MAX_SAVED_COURSES = 3;
+// sessionStorage (not localStorage) is deliberate: these are prototype-stage
+// snapshots that should survive navigating to other pages in the same tab,
+// but don't need to outlive closing the browser/tab the way a real saved-order
+// feature eventually should.
+const SAVED_COURSES_KEY = "playting_saved_courses";
 
 function ToggleButton({ included, onClick }: { included: boolean; onClick: () => void }) {
   return (
@@ -49,6 +54,11 @@ export default function CourseBuilder() {
   const [showDropdown, setShowDropdown] = useState(false);
   const [orderState, setOrderState] = useState<OrderState>("idle");
   const [savedCourses, setSavedCourses] = useState<SavedCourse[]>([]);
+  // Skips the very first persistence write (initial mount, before the
+  // hydration effect below has had a chance to load any existing session
+  // data into state) — otherwise that write would race the hydration read
+  // and could clobber real saved courses with an empty array.
+  const skipNextPersistRef = useRef(true);
   const [activeModalCourse, setActiveModalCourse] = useState<SavedCourse | null>(null);
   const [hoveredSuggestion, setHoveredSuggestion] = useState<TitleSuggestion | null>(null);
   const cursorTooltipRef = useRef<HTMLDivElement>(null);
@@ -71,6 +81,29 @@ export default function CourseBuilder() {
   useEffect(() => {
     includeDessertRef.current = includeDessert;
   }, [includeDessert]);
+
+  // Restores any saved courses from this browser session — must default to
+  // empty during SSR (no `sessionStorage`) and only pick up the real value
+  // once mounted in the browser, or hydration would mismatch against the
+  // server-rendered markup.
+  useEffect(() => {
+    try {
+      const raw = window.sessionStorage.getItem(SAVED_COURSES_KEY);
+      const parsed = raw ? (JSON.parse(raw) as SavedCourse[]) : [];
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      if (parsed.length > 0) setSavedCourses(parsed);
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    if (skipNextPersistRef.current) {
+      skipNextPersistRef.current = false;
+      return;
+    }
+    try {
+      window.sessionStorage.setItem(SAVED_COURSES_KEY, JSON.stringify(savedCourses));
+    } catch {}
+  }, [savedCourses]);
 
   // The menu board's own box always scales correctly with viewport width
   // (fixed aspect-ratio), but its *content* (fonts, poster, gaps) is sized in
@@ -301,12 +334,23 @@ export default function CourseBuilder() {
                                 <p className="text-black">정보를 불러오는 중&hellip;</p>
                               ) : (
                                 <>
-                                  <p className="line-clamp-1">감독 {mainDishDetails?.director ?? "정보 없음"}</p>
+                                  <p className="line-clamp-1">
+                                    감독{" "}
+                                    <span className="rounded bg-gray-200 px-1 text-black">
+                                      {mainDishDetails?.director ?? "정보 없음"}
+                                    </span>
+                                  </p>
                                   <p className="line-clamp-1">
                                     출연{" "}
-                                    {mainDishDetails?.cast.length ? mainDishDetails.cast.join(", ") : "정보 없음"}
+                                    <span className="rounded bg-gray-200 px-1 text-black">
+                                      {mainDishDetails?.cast.length ? mainDishDetails.cast.join(", ") : "정보 없음"}
+                                    </span>
                                   </p>
-                                  <p>{mainDishDetails?.ottName ?? "제공 플랫폼 확인 중"}</p>
+                                  <p>
+                                    <span className="rounded bg-gray-200 px-1 text-black">
+                                      {mainDishDetails?.ottName ?? "제공 플랫폼 확인 중"}
+                                    </span>
+                                  </p>
                                 </>
                               )}
                             </div>

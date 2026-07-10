@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import { OTT_PROVIDERS } from "@/data/ott-providers";
 import type { RelatedGroup, RelatedTitle, SearchMainTitle } from "@/lib/tmdb";
+import FavoriteButton from "@/components/common/FavoriteButton";
 
 function ottColor(ott: string) {
   return OTT_PROVIDERS.find((p) => p.name === ott)?.color ?? "#2D437A";
@@ -18,16 +19,22 @@ function ottColor(ott: string) {
  */
 function RelatedRow({ items }: { items: RelatedTitle[] }) {
   const scrollRef = useRef<HTMLDivElement>(null);
-  const dragState = useRef<{ startX: number; startScrollLeft: number; moved: boolean } | null>(null);
+  const dragState = useRef<{ startX: number; startScrollLeft: number; moved: boolean; captured: boolean } | null>(
+    null
+  );
   const [dragging, setDragging] = useState(false);
 
   const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     if (event.pointerType !== "mouse") return;
     const el = scrollRef.current;
     if (!el) return;
-    dragState.current = { startX: event.clientX, startScrollLeft: el.scrollLeft, moved: false };
+    dragState.current = { startX: event.clientX, startScrollLeft: el.scrollLeft, moved: false, captured: false };
     setDragging(true);
-    el.setPointerCapture(event.pointerId);
+    // Pointer capture is deliberately NOT taken here on plain pointerdown —
+    // capturing on the container immediately breaks the browser's own click
+    // synthesis for a child <button> underneath the pointer (e.g. the
+    // favorite star), so a plain tap/click stopped registering. It's only
+    // engaged once a real drag is confirmed in handlePointerMove.
   };
 
   const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
@@ -35,6 +42,12 @@ function RelatedRow({ items }: { items: RelatedTitle[] }) {
     const state = dragState.current;
     if (!el || !state) return;
     const delta = event.clientX - state.startX;
+    if (!state.captured && Math.abs(delta) > 3) {
+      state.captured = true;
+      try {
+        el.setPointerCapture(event.pointerId);
+      } catch {}
+    }
     if (Math.abs(delta) > 3) state.moved = true;
     el.scrollLeft = state.startScrollLeft - delta;
   };
@@ -43,7 +56,7 @@ function RelatedRow({ items }: { items: RelatedTitle[] }) {
     const el = scrollRef.current;
     if (el && dragState.current) {
       if (dragState.current.moved) event.preventDefault();
-      el.releasePointerCapture(event.pointerId);
+      if (dragState.current.captured) el.releasePointerCapture(event.pointerId);
     }
     dragState.current = null;
     setDragging(false);
@@ -85,6 +98,7 @@ function RelatedRow({ items }: { items: RelatedTitle[] }) {
                 draggable={false}
               />
             )}
+            <FavoriteButton id={`${item.mediaType}-${item.id}`} />
             <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent px-2 pb-2 pt-6">
               <span
                 className="inline-block rounded-full px-1.5 py-0.5 text-[9px] font-bold text-white"
@@ -108,6 +122,7 @@ function MainTitleCard({ main }: { main: SearchMainTitle }) {
       {main.posterUrl && (
         <div className="relative aspect-[2/3] w-32 shrink-0 overflow-hidden rounded-2xl border border-border bg-surface">
           <Image src={main.posterUrl} alt={main.title} fill sizes="128px" className="object-cover" />
+          <FavoriteButton id={`${main.mediaType}-${main.id}`} />
         </div>
       )}
       <div className="flex min-w-0 flex-1 flex-col">

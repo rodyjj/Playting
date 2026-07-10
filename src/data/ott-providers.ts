@@ -13,7 +13,7 @@ export const OTT_PROVIDERS: OttProvider[] = [
   { id: "tving", name: "티빙", color: "#FF1A46", iconUrl: "/ott/tving.png" },
   { id: "watcha", name: "왓챠", color: "#FF0558", iconUrl: "/ott/watcha.png" },
   { id: "wavve", name: "웨이브", color: "#1E1E4B", iconUrl: "/ott/wavve.png" },
-  { id: "laftel", name: "라프텔", color: "#4C2CE5", iconUrl: "/ott/laftel.png" },
   { id: "prime-video", name: "프라임비디오", color: "#1FA8DC", iconUrl: "/ott/prime-video.png" },
+  { id: "laftel", name: "라프텔", color: "#4C2CE5", iconUrl: "/ott/laftel.png" },
   { id: "cineforce", name: "씨네폭스", color: "#F5A623", iconUrl: "/ott/cineforce.png" },
 ];
