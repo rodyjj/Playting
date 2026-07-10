@@ -5,6 +5,7 @@ import Image from "next/image";
 import { OTT_PROVIDERS } from "@/data/ott-providers";
 import FavoriteButton from "@/components/common/FavoriteButton";
 import BestButton from "@/components/common/BestButton";
+import { markWatched } from "@/lib/favorites";
 
 type RankingItem = {
   rank: number;
@@ -46,6 +47,15 @@ function hexToRgba(hex: string, alpha: number) {
 }
 
 function RankingRow({ item }: { item: RankingItem }) {
+  const favoriteItem = {
+    id: `${item.mediaType}-${item.id}`,
+    title: item.title,
+    posterUrl: item.posterUrl,
+    year: item.year,
+    ott: item.ott,
+    watchUrl: item.watchUrl,
+  };
+
   return (
     <li>
       <a
@@ -53,10 +63,11 @@ function RankingRow({ item }: { item: RankingItem }) {
         target="_blank"
         rel="noopener noreferrer"
         aria-label={`${item.title} — ${item.ott}에서 보기`}
-        className="flex items-center gap-3"
+        onClick={() => markWatched(favoriteItem)}
+        className="flex items-start gap-3"
       >
         <span
-          className={`w-6 shrink-0 text-center text-lg font-extrabold ${
+          className={`w-6 shrink-0 self-center text-center text-lg font-extrabold ${
             item.rank <= 3 ? "text-accent-light" : "text-muted"
           }`}
         >
@@ -64,28 +75,14 @@ function RankingRow({ item }: { item: RankingItem }) {
         </span>
         <div className="relative h-[108px] w-[75px] shrink-0 overflow-hidden rounded-xl border border-border bg-surface">
           <Image src={item.posterUrl} alt={item.title} fill sizes="75px" className="object-cover" />
-          <FavoriteButton
-            item={{
-              id: `${item.mediaType}-${item.id}`,
-              title: item.title,
-              posterUrl: item.posterUrl,
-              year: item.year,
-              ott: item.ott,
-              watchUrl: item.watchUrl,
-            }}
-          />
-          <BestButton
-            item={{
-              id: `${item.mediaType}-${item.id}`,
-              title: item.title,
-              posterUrl: item.posterUrl,
-              year: item.year,
-              ott: item.ott,
-              watchUrl: item.watchUrl,
-            }}
-          />
         </div>
-        <div className="flex min-w-0 flex-col gap-1.5">
+        <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+          {/* Same top edge as the poster (row is `items-start`) — the two
+              toggle buttons live outside the poster here, not overlaid on it. */}
+          <div className="flex items-center justify-start gap-1.5">
+            <BestButton item={favoriteItem} variant="inline" />
+            <FavoriteButton item={favoriteItem} variant="inline" />
+          </div>
           <p className="line-clamp-2 text-sm font-semibold text-foreground">{item.title}</p>
           <div className="flex items-center gap-1.5">
             <span

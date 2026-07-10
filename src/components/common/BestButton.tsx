@@ -7,15 +7,20 @@ import { isInCollection, toggleCollection, type FavoriteItem } from "@/lib/favor
  * 🏆 toggle — adds/removes `item` from "인생작" (best). Sits immediately to
  * the left of FavoriteButton (⭐ "볼거에요") on the same poster, at `right-9`
  * rather than that button's `right-1.5`.
+ * `variant="overlay"` (default) absolutely positions itself over a poster;
+ * `variant="inline"` instead flows normally, for placements like 꿀맛 랭킹
+ * where the button sits outside the poster rather than on top of it.
  */
 export default function BestButton({
   item,
   className = "",
   onToggle,
+  variant = "overlay",
 }: {
   item: FavoriteItem;
   className?: string;
   onToggle?: (active: boolean) => void;
+  variant?: "overlay" | "inline";
 }) {
   const [active, setActive] = useState(false);
 
@@ -36,7 +41,9 @@ export default function BestButton({
       }}
       aria-label={active ? "인생작에서 제거" : "인생작으로 추가"}
       aria-pressed={active}
-      className={`absolute right-9 top-1.5 z-20 flex h-6 w-6 items-center justify-center rounded-full border border-white/80 bg-black/40 backdrop-blur-[1px] transition-transform active:scale-90 ${className}`}
+      className={`${
+        variant === "overlay" ? "absolute right-9 top-1.5" : "relative"
+      } z-20 flex h-6 w-6 items-center justify-center rounded-full border border-white/80 bg-black/40 backdrop-blur-[1px] transition-transform active:scale-90 ${className}`}
     >
       <svg
         viewBox="0 0 24 24"

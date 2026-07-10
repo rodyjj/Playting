@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
-import { fetchOnboardingData } from "@/lib/onboarding";
+import { fetchOnboardingData, ONBOARDING_UPDATED_EVENT } from "@/lib/onboarding";
 import { OTT_PROVIDERS } from "@/data/ott-providers";
 import { RefreshIcon } from "@/components/nav/icons";
 import FavoriteButton from "@/components/common/FavoriteButton";
@@ -254,6 +254,29 @@ export default function CourseList() {
     // re-run this same effect without duplicating its logic.
   }, [retryToken]);
 
+  const handleRefresh = () => {
+    forceRefreshRef.current = true;
+    setCourses(null);
+    setRetryToken((t) => t + 1);
+  };
+
+  // Saving a new preferred-genre selection in the mypage genre editor fires
+  // this event — regenerates right away instead of waiting for the next
+  // mount, so the AI courses behind the (now-closing) mypage drawer are
+  // already refreshed for the new genres by the time the user sees them.
+  // Defined inline (not just calling handleRefresh) so this effect can run
+  // once on mount — setCourses/setRetryToken are stable across renders, so
+  // there's no stale-closure risk from skipping handleRefresh as a dependency.
+  useEffect(() => {
+    const onOnboardingUpdate = () => {
+      forceRefreshRef.current = true;
+      setCourses(null);
+      setRetryToken((t) => t + 1);
+    };
+    window.addEventListener(ONBOARDING_UPDATED_EVENT, onOnboardingUpdate);
+    return () => window.removeEventListener(ONBOARDING_UPDATED_EVENT, onOnboardingUpdate);
+  }, []);
+
   if (courses === null) {
     return (
       <div className="flex flex-col gap-3 px-6 pt-8">
@@ -279,12 +302,6 @@ export default function CourseList() {
       </div>
     );
   }
-
-  const handleRefresh = () => {
-    forceRefreshRef.current = true;
-    setCourses(null);
-    setRetryToken((t) => t + 1);
-  };
 
   if (courses.length === 0) {
     if (!failed) return null;

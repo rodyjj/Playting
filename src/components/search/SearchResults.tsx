@@ -7,6 +7,7 @@ import { OTT_PROVIDERS } from "@/data/ott-providers";
 import type { RelatedGroup, RelatedTitle, SearchMainTitle } from "@/lib/tmdb";
 import FavoriteButton from "@/components/common/FavoriteButton";
 import BestButton from "@/components/common/BestButton";
+import { markWatched } from "@/lib/favorites";
 
 function ottColor(ott: string) {
   return OTT_PROVIDERS.find((p) => p.name === ott)?.color ?? "#2D437A";
@@ -95,6 +96,7 @@ function RelatedRow({ items }: { items: RelatedTitle[] }) {
           aria-label={`${item.title} — ${item.ott}에서 보기`}
           draggable={false}
           onDragStart={(e) => e.preventDefault()}
+          onClick={() => markWatched(favoriteItem)}
           className="w-32 shrink-0"
         >
           <div className="relative aspect-[2/3] w-full overflow-hidden rounded-2xl border border-border bg-surface">
@@ -129,31 +131,22 @@ function RelatedRow({ items }: { items: RelatedTitle[] }) {
 }
 
 function MainTitleCard({ main }: { main: SearchMainTitle }) {
+  const favoriteItem = {
+    id: `${main.mediaType}-${main.id}`,
+    title: main.title,
+    posterUrl: main.posterUrl,
+    year: main.year,
+    ott: main.ottName ?? undefined,
+    watchUrl: main.watchUrl ?? undefined,
+  };
+
   return (
     <div className="flex gap-4 px-6 pt-8">
       {main.posterUrl && (
         <div className="relative aspect-[2/3] w-32 shrink-0 overflow-hidden rounded-2xl border border-border bg-surface">
           <Image src={main.posterUrl} alt={main.title} fill sizes="128px" className="object-cover" />
-          <FavoriteButton
-            item={{
-              id: `${main.mediaType}-${main.id}`,
-              title: main.title,
-              posterUrl: main.posterUrl,
-              year: main.year,
-              ott: main.ottName ?? undefined,
-              watchUrl: main.watchUrl ?? undefined,
-            }}
-          />
-          <BestButton
-            item={{
-              id: `${main.mediaType}-${main.id}`,
-              title: main.title,
-              posterUrl: main.posterUrl,
-              year: main.year,
-              ott: main.ottName ?? undefined,
-              watchUrl: main.watchUrl ?? undefined,
-            }}
-          />
+          <FavoriteButton item={favoriteItem} />
+          <BestButton item={favoriteItem} />
         </div>
       )}
       <div className="flex min-w-0 flex-1 flex-col">
@@ -182,6 +175,7 @@ function MainTitleCard({ main }: { main: SearchMainTitle }) {
             href={main.watchUrl}
             target="_blank"
             rel="noopener noreferrer"
+            onClick={() => markWatched(favoriteItem)}
             className="mt-auto block rounded-xl bg-accent-light py-2.5 text-center text-sm font-bold text-white"
           >
             시청하기

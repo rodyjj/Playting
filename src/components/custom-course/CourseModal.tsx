@@ -6,6 +6,7 @@ import { Song_Myung } from "next/font/google";
 import type { TitleDetails, TitleSuggestion } from "@/lib/tmdb";
 import FavoriteButton from "@/components/common/FavoriteButton";
 import BestButton from "@/components/common/BestButton";
+import { markWatched } from "@/lib/favorites";
 
 const songMyung = Song_Myung({ weight: "400" });
 
@@ -70,6 +71,15 @@ export default function CourseModal({
   const [dessertVideos, setDessertVideos] = useState<YoutubeVideo[] | undefined>(undefined);
   const [dessertReady, setDessertReady] = useState(true);
   const [dessertCategory, setDessertCategory] = useState<DessertCategory | null>(null);
+
+  const favoriteItem = {
+    id: `${mainDish.mediaType}-${mainDish.id}`,
+    title: mainDish.title,
+    posterUrl: mainDish.posterUrl,
+    year: mainDish.year,
+    ott: mainDishDetails?.ottName ?? undefined,
+    watchUrl: mainDishDetails?.watchUrl ?? undefined,
+  };
 
   useEffect(() => {
     const controller = new AbortController();
@@ -172,26 +182,8 @@ export default function CourseModal({
               {mainDish.posterUrl && (
                 <div className="relative aspect-[2/3] w-28 shrink-0 overflow-hidden rounded-lg border border-border">
                   <Image src={mainDish.posterUrl} alt={mainDish.title} fill sizes="112px" className="object-cover" />
-                  <FavoriteButton
-                    item={{
-                      id: `${mainDish.mediaType}-${mainDish.id}`,
-                      title: mainDish.title,
-                      posterUrl: mainDish.posterUrl,
-                      year: mainDish.year,
-                      ott: mainDishDetails?.ottName ?? undefined,
-                      watchUrl: mainDishDetails?.watchUrl ?? undefined,
-                    }}
-                  />
-                  <BestButton
-                    item={{
-                      id: `${mainDish.mediaType}-${mainDish.id}`,
-                      title: mainDish.title,
-                      posterUrl: mainDish.posterUrl,
-                      year: mainDish.year,
-                      ott: mainDishDetails?.ottName ?? undefined,
-                      watchUrl: mainDishDetails?.watchUrl ?? undefined,
-                    }}
-                  />
+                  <FavoriteButton item={favoriteItem} />
+                  <BestButton item={favoriteItem} />
                 </div>
               )}
               <div className="min-w-0 flex-1 text-sm leading-relaxed text-muted">
@@ -210,6 +202,7 @@ export default function CourseModal({
                 href={mainDishDetails.watchUrl}
                 target="_blank"
                 rel="noopener noreferrer"
+                onClick={() => markWatched(favoriteItem)}
                 className="mt-4 block rounded-xl bg-accent-light py-3 text-center text-sm font-bold text-white"
               >
                 메인디쉬 시청하기

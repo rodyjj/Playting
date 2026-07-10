@@ -12,7 +12,7 @@ export type FavoriteItem = {
   watchUrl?: string;
 };
 
-export type CollectionKey = "watchlist" | "best";
+export type CollectionKey = "watchlist" | "best" | "watched";
 
 const STORAGE_KEYS: Record<CollectionKey, string> = {
   // Kept under the pre-existing "playting_favorites" key (from before
@@ -20,6 +20,7 @@ const STORAGE_KEYS: Record<CollectionKey, string> = {
   // earlier keep showing up under their new home, 볼거에요.
   watchlist: "playting_favorites",
   best: "playting_best",
+  watched: "playting_watched",
 };
 
 function readCollection(key: CollectionKey): Record<string, FavoriteItem> {
@@ -54,4 +55,24 @@ export function toggleCollection(key: CollectionKey, item: FavoriteItem): boolea
   else delete items[item.id];
   writeCollection(key, items);
   return nextActive;
+}
+
+/**
+ * Logs `item` as watched — called from every external "watch" link/button
+ * (poster click-through, 시청하기) rather than from a manual toggle button.
+ * Re-inserts on a repeat view so it moves back to the front of "봤어요"
+ * (getCollection reverses insertion order), matching a "recently watched" feel.
+ */
+export function markWatched(item: FavoriteItem): void {
+  const items = readCollection("watched");
+  delete items[item.id];
+  items[item.id] = item;
+  writeCollection("watched", items);
+}
+
+/** Removes `id` from `key` outright — used by the "제거" button in "봤어요". */
+export function removeFromCollection(key: CollectionKey, id: string): void {
+  const items = readCollection(key);
+  delete items[id];
+  writeCollection(key, items);
 }

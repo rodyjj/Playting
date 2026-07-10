@@ -4,6 +4,14 @@ import { getClientId } from "./client-id";
 const COMPLETE_KEY = "playting_onboarding_complete";
 const DATA_KEY = "playting_onboarding_data";
 
+/**
+ * Fired after a successful submitOnboarding() so any already-mounted screen
+ * that generated something from the old profile (namely the home AI course
+ * list, sitting behind the mypage drawer the genre editor opens from) can
+ * regenerate immediately instead of waiting for its next mount.
+ */
+export const ONBOARDING_UPDATED_EVENT = "playting:onboarding-updated";
+
 export type OnboardingData = {
   age: number;
   subscribedOtt: string[];
@@ -17,6 +25,7 @@ export async function submitOnboarding(data: OnboardingData): Promise<{ ok: bool
   // Kept locally regardless of Supabase status — this is what the home screen
   // reads to personalize recommendations, so it must survive even without a DB.
   window.localStorage.setItem(DATA_KEY, JSON.stringify(data));
+  window.dispatchEvent(new Event(ONBOARDING_UPDATED_EVENT));
 
   const supabase = getSupabaseClient();
   if (!supabase) {

@@ -3,15 +3,22 @@
 import { useEffect, useState } from "react";
 import { isInCollection, toggleCollection, type FavoriteItem } from "@/lib/favorites";
 
-/** ⭐ toggle — adds/removes `item` from "볼거에요" (watchlist). */
+/**
+ * ⭐ toggle — adds/removes `item` from "볼거에요" (watchlist).
+ * `variant="overlay"` (default) absolutely positions itself over a poster;
+ * `variant="inline"` instead flows normally, for placements like 꿀맛 랭킹
+ * where the button sits outside the poster rather than on top of it.
+ */
 export default function FavoriteButton({
   item,
   className = "",
   onToggle,
+  variant = "overlay",
 }: {
   item: FavoriteItem;
   className?: string;
   onToggle?: (active: boolean) => void;
+  variant?: "overlay" | "inline";
 }) {
   const [active, setActive] = useState(false);
 
@@ -38,7 +45,9 @@ export default function FavoriteButton({
       }}
       aria-label={active ? "볼거에요에서 제거" : "볼거에요에 추가"}
       aria-pressed={active}
-      className={`absolute right-1.5 top-1.5 z-20 flex h-6 w-6 items-center justify-center rounded-full border border-white/80 bg-black/40 backdrop-blur-[1px] transition-transform active:scale-90 ${className}`}
+      className={`${
+        variant === "overlay" ? "absolute right-1.5 top-1.5" : "relative"
+      } z-20 flex h-6 w-6 items-center justify-center rounded-full border border-white/80 bg-black/40 backdrop-blur-[1px] transition-transform active:scale-90 ${className}`}
     >
       <svg
         viewBox="0 0 24 24"

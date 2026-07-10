@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { OTT_PROVIDERS } from "@/data/ott-providers";
+import { markWatched } from "@/lib/favorites";
 
 type PromoItem = {
   id: number;
@@ -163,6 +164,16 @@ export default function PromoCarousel() {
                   aria-label={`${item.title} — ${item.ott}에서 보기`}
                   draggable={false}
                   onDragStart={(e) => e.preventDefault()}
+                  onClick={() =>
+                    markWatched({
+                      id: `${item.mediaType}-${item.id}`,
+                      title: item.title,
+                      posterUrl: item.posterUrl,
+                      year: item.year,
+                      ott: item.ott,
+                      watchUrl: item.watchUrl,
+                    })
+                  }
                   className={`relative block overflow-hidden rounded-2xl border border-border bg-surface transition-all duration-500 select-none ${
                     isActive ? "scale-100 opacity-100" : "scale-[0.92] opacity-50"
                   }`}

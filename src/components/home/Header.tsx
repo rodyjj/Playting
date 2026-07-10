@@ -4,9 +4,11 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { LoginIcon, MyPageIcon } from "@/components/nav/icons";
+import GenreEditScreen from "@/components/onboarding/GenreEditScreen";
 
 export default function Header() {
   const [isMyPageOpen, setIsMyPageOpen] = useState(false);
+  const [isGenreEditOpen, setIsGenreEditOpen] = useState(false);
 
   // Lets the phone's hardware/gesture back button close the drawer (instead of
   // navigating away from the page) — closing always goes through this listener,
@@ -110,13 +112,26 @@ export default function Header() {
               ✕
             </button>
           </div>
-          <div className="px-5">
+          <div className="flex flex-col gap-3 px-5">
             <div className="rounded-2xl border border-border bg-surface p-4">
               <p className="text-sm font-medium text-foreground">Guest 로그인 상태입니다.</p>
             </div>
+            <button
+              type="button"
+              onClick={() => setIsGenreEditOpen(true)}
+              className="flex items-center justify-between rounded-2xl border border-border bg-surface px-4 py-3 text-left"
+            >
+              <span className="min-w-0">
+                <span className="block text-sm font-bold text-foreground">선호 장르 재설정</span>
+                <span className="block text-xs text-muted">홈 화면 추천에 반영할 장르를 다시 골라요</span>
+              </span>
+              <span className="shrink-0 pl-3 text-lg text-muted">›</span>
+            </button>
           </div>
         </aside>
       </div>
+
+      {isGenreEditOpen && <GenreEditScreen onClose={() => setIsGenreEditOpen(false)} />}
     </>
   );
 }
